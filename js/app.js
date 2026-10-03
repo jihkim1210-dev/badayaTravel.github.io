@@ -14,8 +14,8 @@ const num = (v) => { const n = parseFloat(String(v).replace(/,/g, '')); return N
 let store;
 const expanded = new Set();
 let installEvent = null;
-const ui = Object.assign({ orderMode: 'cash', orderView: 'cards', onlySel: false, homeFilter: 'open', productRegion: 'DUBAI', extraCur: '' }, ls.get('badaya.ui', {}));
-const saveUI = () => ls.set('badaya.ui', { orderMode: ui.orderMode, orderView: ui.orderView, onlySel: ui.onlySel, homeFilter: ui.homeFilter, productRegion: ui.productRegion });
+const ui = Object.assign({ orderMode: 'cash', orderView: 'table', onlySel: false, homeFilter: 'open', productRegion: 'DUBAI', extraCur: '' }, ls.get('badaya.ui.v2', {}));
+const saveUI = () => ls.set('badaya.ui.v2', { orderMode: ui.orderMode, orderView: ui.orderView, onlySel: ui.onlySel, homeFilter: ui.homeFilter, productRegion: ui.productRegion });
 
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; scheduleRender(); });
 
@@ -215,7 +215,7 @@ function tabOrders(t, c) {
     <span class="label">누르면</span>
     <div class="seg modes">${Object.entries(MODES).map(([k, m]) => `<button class="m-${k} ${ui.orderMode === k ? 'on' : ''}" data-act="mode" data-mode="${k}">${m.label}</button>`).join('')}</div>
     ${ui.orderView === 'cards' ? `<label class="check-field small"><input type="checkbox" id="only-sel" data-act="only-sel" ${ui.onlySel ? 'checked' : ''}> 선택한 상품만</label>` : ''}
-    <div class="seg small">${[['cards', '카드'], ['table', '표']].map(([k, l]) => `<button class="${ui.orderView === k ? 'on' : ''}" data-act="order-view" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="seg small">${[['table', '표'], ['cards', '카드']].map(([k, l]) => `<button class="${ui.orderView === k ? 'on' : ''}" data-act="order-view" data-v="${k}">${l}</button>`).join('')}</div>
   </div>
   <p class="hint">상품을 누르면 <b>${MODES[ui.orderMode].label}</b>으로 표시되고, 같은 상태에서 한 번 더 누르면 취소됩니다. 현금만 수금 대상 금액에 들어갑니다.</p>`;
   const actions = `<div class="row-actions">

@@ -1,6 +1,6 @@
 // 앱 화면 파일을 기기에 저장해 인터넷이 약한 현장에서도 바로 열리게 합니다.
 // 파일을 수정해 배포할 때는 VERSION 을 올리세요.
-const VERSION = 'badaya-v5';
+const VERSION = 'badaya-v6';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/config.js', './js/store.js', './js/calc.js', './js/seed.js', './js/excel.js',

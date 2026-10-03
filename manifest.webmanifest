@@ -1,7 +1,7 @@
 {
   "name": "Badaya Field",
   "short_name": "Badaya",
-  "description": "BadayaTravel 현장 수금·주문서 관리",
+  "description": "Badaya Travel 현장 수금·주문서 관리",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",

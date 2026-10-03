@@ -177,7 +177,7 @@ Supabase 무료 프로젝트는 **7일 동안 아무도 쓰지 않으면 일시�
 
 현재 주소(`jihkim1210-dev.github.io/badayaTravel.github.io/`)로도 HTTPS, 홈 화면 설치, 오프라인 모두 동작합니다. 도메인은 주소를 짧고 회사답게 만드는 용도입니다.
 
-**무료로 주소만 짧게**: GitHub 저장소 Settings → General → Repository name을 `badaya`로 바꾸면 주소가 `jihkim1210-dev.github.io/badaya/`가 됩니다. 이미 홈 화면에 추가한 직원은 새 주소로 다시 추가해야 하고, 로그인도 다시 해야 합니다.
+**무료로 주소만 짧게**: GitHub 저장소 Settings → General → Repository name을 `badaya`로 바꾸면 주소가 `jihkim1210-dev.github.io/badaya/`가 됩니다. 이미 홈 화면에 추가한 직원은 새 주소로 다시 추가해야 하고, 로그인도 다시 해야 합니다. `index.html`의 `og:url`, `og:image` 주소도 함께 바꿔 주세요.
 
 ### 4-2. 도메인을 살 때
 
@@ -186,7 +186,7 @@ Supabase 무료 프로젝트는 **7일 동안 아무도 쓰지 않으면 일시�
    - 도메인 관리 화면(DNS)에서 레코드 추가: 종류 **CNAME**, 이름 `app`, 값 `jihkim1210-dev.github.io`
 3. GitHub 저장소 Settings → Pages → **Custom domain**에 `app.badayatravel.com` 입력 → Save
 4. 확인이 끝나면(수 분~수 시간) **Enforce HTTPS** 체크
-5. 새 주소는 `https://app.badayatravel.com/`이 됩니다. 코드 수정은 필요 없습니다.
+5. 새 주소는 `https://app.badayatravel.com/`이 됩니다. 앱 동작에는 코드 수정이 필요 없지만, 링크를 보낼 때 뜨는 미리보기 이미지를 위해 `index.html` 위쪽의 `og:url`, `og:image` 두 줄에 적힌 주소를 새 주소로 바꿔 주세요.
 6. 직원들은 새 주소로 다시 홈 화면에 추가하고 로그인합니다(주소가 바뀌면 휴대폰에 저장된 로그인·대기 데이터가 따로 관리되므로, **바꾸기 전에 모든 직원의 ‘대기 N건’이 0인지 확인**하세요).
 
 회사 홈페이지를 `badayatravel.com`에서 따로 운영할 계획이면, 앱은 위처럼 `app.` 하위 주소에 두는 것이 깔끔합니다.

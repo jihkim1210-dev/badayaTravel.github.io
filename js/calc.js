@@ -3,7 +3,7 @@
 export const CURRENCIES = ['EUR', 'USD', 'KRW', 'AED', 'EGP'];
 
 export const REGIONS = {
-  DUBAI: { label: '두바이', currency: 'USD' },
+  DUBAI: { label: '두바이', currency: 'AED' },
   EGYPT: { label: '이집트', currency: 'EUR' },
 };
 

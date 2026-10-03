@@ -19,6 +19,7 @@
   --bad-soft: #f8dcdb;
   --violet: #6a4bb0;
   --violet-soft: #e7e0f6;
+  --brand: #D55E00;
   --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --r: 10px;
@@ -30,7 +31,7 @@
     --bg: #0c1617; --surface: #132224; --sunk: #0f1c1e; --ink: #e2eeed; --muted: #8ea6a8; --line: #24393c;
     --accent: #3fb8b0; --accent-ink: #062224; --accent-soft: #163b3c;
     --gold: #e3a94d; --gold-soft: #3a2d16; --good: #5fcf8f; --good-soft: #163526;
-    --warn: #f0995a; --warn-soft: #3d2615; --bad: #f07a77; --bad-soft: #3e1d1d; --violet: #b49cf0; --violet-soft: #2b2340;
+    --warn: #f0995a; --warn-soft: #3d2615; --bad: #f07a77; --bad-soft: #3e1d1d; --violet: #b49cf0; --violet-soft: #2b2340; --brand: #F08A3C;
     color-scheme: dark;
   }
 }
@@ -38,7 +39,7 @@
   --bg: #0c1617; --surface: #132224; --sunk: #0f1c1e; --ink: #e2eeed; --muted: #8ea6a8; --line: #24393c;
   --accent: #3fb8b0; --accent-ink: #062224; --accent-soft: #163b3c;
   --gold: #e3a94d; --gold-soft: #3a2d16; --good: #5fcf8f; --good-soft: #163526;
-  --warn: #f0995a; --warn-soft: #3d2615; --bad: #f07a77; --bad-soft: #3e1d1d; --violet: #b49cf0; --violet-soft: #2b2340;
+  --warn: #f0995a; --warn-soft: #3d2615; --bad: #f07a77; --bad-soft: #3e1d1d; --violet: #b49cf0; --violet-soft: #2b2340; --brand: #F08A3C;
   color-scheme: dark;
 }
 
@@ -67,19 +68,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar {
   position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
   padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
-  background: var(--accent); color: var(--accent-ink);
+  background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; margin-right: auto; }
-.mark { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-ink); color: var(--accent); font: 700 16px var(--mono); }
-.word { font: 600 14px var(--mono); letter-spacing: .14em; display: flex; flex-direction: column; line-height: 1.05; }
-.word small { font-size: 9px; letter-spacing: .32em; opacity: .75; }
-.who { font-size: 13px; opacity: .85; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conn { font-size: 12px; padding: 3px 9px 3px 20px; border-radius: 99px; background: rgba(255,255,255,.14); position: relative; white-space: nowrap; }
+.brand { display: flex; align-items: center; color: var(--brand); text-decoration: none; margin-right: auto; }
+.brand .logo { height: 30px; width: auto; display: block; }
+.who { font-size: 13px; color: var(--muted); max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn { font-size: 12px; padding: 3px 9px 3px 20px; border-radius: 99px; background: var(--sunk); color: var(--muted); position: relative; white-space: nowrap; }
 .conn::before { content: ""; position: absolute; left: 8px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: currentColor; opacity: .6; }
-.conn.ok::before { background: #7ff0b4; opacity: 1; box-shadow: 0 0 0 3px rgba(127,240,180,.25); }
-.conn.warn::before { background: #ffc97a; opacity: 1; }
-.conn.bad::before { background: #ff8e8a; opacity: 1; }
-.conn.demo::before { background: #ffe08a; opacity: 1; }
+.conn.ok::before { background: var(--good); opacity: 1; box-shadow: 0 0 0 3px var(--good-soft); }
+.conn.warn::before { background: var(--warn); opacity: 1; }
+.conn.bad::before { background: var(--bad); opacity: 1; }
+.conn.demo::before { background: var(--gold); opacity: 1; }
 
 .view { max-width: 760px; margin: 0 auto; padding-inline: 16px; padding-block: 16px; }
 .view:has(.matrix) { max-width: 1200px; }
@@ -284,6 +283,7 @@ textarea, .field input, .field select { width: 100%; padding: 10px 12px; border:
 .toast.bad { background: var(--bad); color: #fff; }
 
 .login-card { max-width: 400px; margin: 40px auto; }
+.login-logo { width: 180px; height: auto; margin: 4px auto 8px; display: block; }
 
 @media (max-width: 420px) {
   .who { display: none; }

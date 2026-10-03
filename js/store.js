@@ -60,7 +60,11 @@ export class LocalStore extends BaseStore {
       // 예전 체험 데이터에 새 기본값(투어별 요금 선택지) 채우기
       for (const p of DEFAULT_PRODUCTS) {
         const cur = this.get('products', p.id);
-        if (cur && cur.rates === undefined) this._set('products', { ...cur, rates: p.rates });
+        if (!cur) this._set('products', { ...p });
+        else {
+          if (cur.rates === undefined) this._set('products', { ...this.get('products', p.id), rates: p.rates });
+          if (cur.region === 'DUBAI' && cur.currency === 'USD' && p.currency === 'AED') this._set('products', { ...this.get('products', p.id), currency: 'AED' });
+        }
       }
     } else {
       this.reset();

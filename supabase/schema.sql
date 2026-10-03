@@ -191,26 +191,34 @@ insert into public.products (id, region, name, price, currency, units, sort) val
   ('prd-egypt-11', 'EGYPT', '사막 사파리', 80, 'EUR', 1, 110),
   ('prd-egypt-12', 'EGYPT', '투탕카멘의 무덤 내부 관람', 70, 'EUR', 1, 120),
   ('prd-egypt-13', 'EGYPT', '부르즈 칼리파 전망대', 90, 'EUR', 1, 130),
-  ('prd-dubai-14', 'DUBAI', 'Yacht Tour', 60, 'USD', 1, 140),
-  ('prd-dubai-15', 'DUBAI', 'Green Planet', 90, 'USD', 1, 150),
-  ('prd-dubai-16', 'DUBAI', 'The View at The Palm', 80, 'USD', 1, 160),
-  ('prd-dubai-17', 'DUBAI', 'BBQ Lunch', 60, 'USD', 1, 170),
-  ('prd-dubai-18', 'DUBAI', 'Dhow Cruise', 130, 'USD', 1, 180),
-  ('prd-dubai-19', 'DUBAI', 'La Perle', 150, 'USD', 1, 190),
-  ('prd-dubai-20', 'DUBAI', 'Museum of the Future', 80, 'USD', 1, 200),
-  ('prd-dubai-21', 'DUBAI', 'Burj Khalifa', 100, 'USD', 1, 210),
-  ('prd-dubai-22', 'DUBAI', 'Seafood Lunch', 30, 'USD', 1, 220),
-  ('prd-dubai-23', 'DUBAI', 'Desert Safari', 120, 'USD', 1, 230),
-  ('prd-dubai-24', 'DUBAI', 'Dubai Frame', 50, 'USD', 1, 240),
-  ('prd-dubai-25', 'DUBAI', 'Walk Bridge', 20, 'USD', 1, 250),
-  ('prd-dubai-26', 'DUBAI', 'Kandura & Abaya', 10, 'USD', 1, 260),
-  ('prd-dubai-27', 'DUBAI', 'Louvre Abu Dhabi', 80, 'USD', 1, 270),
-  ('prd-dubai-28', 'DUBAI', 'Sheikh Zayed Mosque', 70, 'USD', 1, 280),
-  ('prd-dubai-29', 'DUBAI', 'Qasr Al Watan', 50, 'USD', 1, 290),
-  ('prd-dubai-30', 'DUBAI', 'Tourism Dirham (3N)', 12, 'USD', 1, 300),
-  ('prd-dubai-31', 'DUBAI', 'Tourism Dirham (4N)', 16, 'USD', 1, 310),
-  ('prd-dubai-32', 'DUBAI', 'Tourism Dirham (5N)', 20, 'USD', 1, 320)
+  ('prd-dubai-14', 'DUBAI', 'Yacht Tour', 60, 'AED', 1, 140),
+  ('prd-dubai-15', 'DUBAI', 'Green Planet', 90, 'AED', 1, 150),
+  ('prd-dubai-16', 'DUBAI', 'The View at The Palm', 80, 'AED', 1, 160),
+  ('prd-dubai-17', 'DUBAI', 'BBQ Lunch', 60, 'AED', 1, 170),
+  ('prd-dubai-18', 'DUBAI', 'Dhow Cruise', 130, 'AED', 1, 180),
+  ('prd-dubai-19', 'DUBAI', 'La Perle', 150, 'AED', 1, 190),
+  ('prd-dubai-20', 'DUBAI', 'Museum of the Future', 80, 'AED', 1, 200),
+  ('prd-dubai-21', 'DUBAI', 'Burj Khalifa', 100, 'AED', 1, 210),
+  ('prd-dubai-22', 'DUBAI', 'Seafood Lunch', 30, 'AED', 1, 220),
+  ('prd-dubai-23', 'DUBAI', 'Desert Safari', 120, 'AED', 1, 230),
+  ('prd-dubai-24', 'DUBAI', 'Dubai Frame', 50, 'AED', 1, 240),
+  ('prd-dubai-25', 'DUBAI', 'Walk Bridge', 20, 'AED', 1, 250),
+  ('prd-dubai-26', 'DUBAI', 'Kandura & Abaya', 10, 'AED', 1, 260),
+  ('prd-dubai-27', 'DUBAI', 'Louvre Abu Dhabi', 80, 'AED', 1, 270),
+  ('prd-dubai-28', 'DUBAI', 'Sheikh Zayed Mosque', 70, 'AED', 1, 280),
+  ('prd-dubai-29', 'DUBAI', 'Qasr Al Watan', 50, 'AED', 1, 290),
+  ('prd-dubai-30', 'DUBAI', 'Tourism Dirham (3N)', 12, 'AED', 1, 300),
+  ('prd-dubai-31', 'DUBAI', 'Tourism Dirham (4N)', 16, 'AED', 1, 310),
+  ('prd-dubai-32', 'DUBAI', 'Tourism Dirham (5N)', 20, 'AED', 1, 320)
 on conflict (id) do nothing;
+
+-- 두바이 팁 (USD). 1인당 금액을 정하면 앱 상품 화면에서 가격을 넣고 '주문서에 표시'를 켜세요.
+insert into public.products (id, region, name, price, currency, units, sort, active)
+values ('prd-dubai-33', 'DUBAI', 'Tips', 0, 'USD', 1, 330, false)
+on conflict (id) do nothing;
+
+-- 2026-10-03 이전 버전으로 만든 두바이 상품을 AED로 바꾸기 (팁 제외)
+update public.products set currency = 'AED' where region = 'DUBAI' and currency = 'USD' and id <> 'prd-dubai-33';
 
 update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rates is null;
 

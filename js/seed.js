@@ -1,4 +1,4 @@
-// 기본 상품표. 이집트는 'PROJECT SETTLEMENT - EGYPT' / CC 시트, 두바이는 직원 HTML 시안의 가격을 옮겼습니다.
+// 기본 상품표. 이집트는 'PROJECT SETTLEMENT - EGYPT' / CC 시트, 두바이는 직원 HTML 시안의 가격을 AED로 옮겼습니다(팁만 USD).
 // units: 엑셀 '총 옵션 합계'에서 2개로 세던 결합 상품.
 export const DEFAULT_PRODUCTS = [
   ['EGYPT', 'Tour Expense', 90, 'EUR', 1, [90, 100]],
@@ -14,28 +14,29 @@ export const DEFAULT_PRODUCTS = [
   ['EGYPT', '사막 사파리', 80, 'EUR', 1],
   ['EGYPT', '투탕카멘의 무덤 내부 관람', 70, 'EUR', 1],
   ['EGYPT', '부르즈 칼리파 전망대', 90, 'EUR', 1],
-  ['DUBAI', 'Yacht Tour', 60, 'USD', 1],
-  ['DUBAI', 'Green Planet', 90, 'USD', 1],
-  ['DUBAI', 'The View at The Palm', 80, 'USD', 1],
-  ['DUBAI', 'BBQ Lunch', 60, 'USD', 1],
-  ['DUBAI', 'Dhow Cruise', 130, 'USD', 1],
-  ['DUBAI', 'La Perle', 150, 'USD', 1],
-  ['DUBAI', 'Museum of the Future', 80, 'USD', 1],
-  ['DUBAI', 'Burj Khalifa', 100, 'USD', 1],
-  ['DUBAI', 'Seafood Lunch', 30, 'USD', 1],
-  ['DUBAI', 'Desert Safari', 120, 'USD', 1],
-  ['DUBAI', 'Dubai Frame', 50, 'USD', 1],
-  ['DUBAI', 'Walk Bridge', 20, 'USD', 1],
-  ['DUBAI', 'Kandura & Abaya', 10, 'USD', 1],
-  ['DUBAI', 'Louvre Abu Dhabi', 80, 'USD', 1],
-  ['DUBAI', 'Sheikh Zayed Mosque', 70, 'USD', 1],
-  ['DUBAI', 'Qasr Al Watan', 50, 'USD', 1],
-  ['DUBAI', 'Tourism Dirham (3N)', 12, 'USD', 1],
-  ['DUBAI', 'Tourism Dirham (4N)', 16, 'USD', 1],
-  ['DUBAI', 'Tourism Dirham (5N)', 20, 'USD', 1],
-].map(([region, name, price, currency, units, rates], i) => ({
+  ['DUBAI', 'Yacht Tour', 60, 'AED', 1],
+  ['DUBAI', 'Green Planet', 90, 'AED', 1],
+  ['DUBAI', 'The View at The Palm', 80, 'AED', 1],
+  ['DUBAI', 'BBQ Lunch', 60, 'AED', 1],
+  ['DUBAI', 'Dhow Cruise', 130, 'AED', 1],
+  ['DUBAI', 'La Perle', 150, 'AED', 1],
+  ['DUBAI', 'Museum of the Future', 80, 'AED', 1],
+  ['DUBAI', 'Burj Khalifa', 100, 'AED', 1],
+  ['DUBAI', 'Seafood Lunch', 30, 'AED', 1],
+  ['DUBAI', 'Desert Safari', 120, 'AED', 1],
+  ['DUBAI', 'Dubai Frame', 50, 'AED', 1],
+  ['DUBAI', 'Walk Bridge', 20, 'AED', 1],
+  ['DUBAI', 'Kandura & Abaya', 10, 'AED', 1],
+  ['DUBAI', 'Louvre Abu Dhabi', 80, 'AED', 1],
+  ['DUBAI', 'Sheikh Zayed Mosque', 70, 'AED', 1],
+  ['DUBAI', 'Qasr Al Watan', 50, 'AED', 1],
+  ['DUBAI', 'Tourism Dirham (3N)', 12, 'AED', 1],
+  ['DUBAI', 'Tourism Dirham (4N)', 16, 'AED', 1],
+  ['DUBAI', 'Tourism Dirham (5N)', 20, 'AED', 1],
+  ['DUBAI', 'Tips', 0, 'USD', 1, null, false], // 팁은 USD. 1인당 금액을 정한 뒤 상품 화면에서 가격 입력·표시
+].map(([region, name, price, currency, units, rates, active = true], i) => ({
   id: 'prd-' + region.toLowerCase() + '-' + String(i + 1).padStart(2, '0'),
-  region, name, price, currency, units, rates: rates || null, sort: (i + 1) * 10, active: true,
+  region, name, price, currency, units, rates: rates || null, sort: (i + 1) * 10, active,
 }));
 
 // 체험 모드에서만 쓰는 예시 투어 (실제 고객 정보 아님)
@@ -46,7 +47,7 @@ export function sampleData(now = new Date()) {
   const tour = {
     id: 'tour-sample-1', bdy: '4478', region: 'DUBAI', tour_code: 'EK3N6D', start_date: day(-1),
     guide: '예시 가이드', status: 'open', notes: '예시 투어입니다. 자유롭게 눌러보고 지워도 됩니다.',
-    cash_received: { USD: 500 }, cash_on_hand: {}, created_at: t, updated_at: t,
+    cash_received: { AED: 500 }, cash_on_hand: {}, created_at: t, updated_at: t,
   };
   const names = [
     [1, '김예시', 'KIM/YESI', 'Ms'], [1, '이샘플', 'LEE/SAMPLE', 'Mr'], [1, '박데모', 'PARK/DEMO', 'Ms'],
@@ -74,12 +75,12 @@ export function sampleData(now = new Date()) {
     }
   }
   const payments = [
-    { id: 'pay-sample-1', tour_id: tour.id, passenger_id: passengers[0].id, currency: 'USD', amount: 350, method: 'cash', note: '', created_by: '예시 가이드', created_at: t },
-    { id: 'pay-sample-2', tour_id: tour.id, passenger_id: passengers[1].id, currency: 'USD', amount: 100, method: 'cash', note: '나머지는 내일', created_by: '예시 가이드', created_at: t },
-    { id: 'pay-sample-3', tour_id: tour.id, passenger_id: passengers[5].id, currency: 'USD', amount: 250, method: 'card', note: '', created_by: '예시 가이드', created_at: t },
+    { id: 'pay-sample-1', tour_id: tour.id, passenger_id: passengers[0].id, currency: 'AED', amount: 350, method: 'cash', note: '', created_by: '예시 가이드', created_at: t },
+    { id: 'pay-sample-2', tour_id: tour.id, passenger_id: passengers[1].id, currency: 'AED', amount: 100, method: 'cash', note: '나머지는 내일', created_by: '예시 가이드', created_at: t },
+    { id: 'pay-sample-3', tour_id: tour.id, passenger_id: passengers[5].id, currency: 'AED', amount: 250, method: 'card', note: '', created_by: '예시 가이드', created_at: t },
   ];
   const expenses = [
-    { id: 'exp-sample-1', tour_id: tour.id, kind: 'expense', place: '두바이', category: '팁', currency: 'USD', amount: 40, note: '사파리 드라이버', created_by: '예시 가이드', created_at: t },
+    { id: 'exp-sample-1', tour_id: tour.id, kind: 'expense', place: '두바이', category: '팁', currency: 'AED', amount: 40, note: '사파리 드라이버', created_by: '예시 가이드', created_at: t },
   ];
   return { tours: [tour], passengers, orders, payments, expenses };
 }

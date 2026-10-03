@@ -448,7 +448,8 @@ function renderLogin() {
   document.body.classList.add('login');
   $('#view').innerHTML = `
   <form class="card login-card" id="login-form">
-    <h2>Badaya Field 로그인</h2>
+    <img class="login-logo" src="icons/logo.svg" alt="Badaya Field">
+    <h2>로그인</h2>
     <p class="muted">회사에서 받은 이메일과 비밀번호로 로그인하세요.</p>
     <label class="field"><span>이메일</span><input id="login-email" name="email" type="email" autocomplete="username" required></label>
     <label class="field"><span>비밀번호</span><input id="login-pw" name="password" type="password" autocomplete="current-password" required></label>

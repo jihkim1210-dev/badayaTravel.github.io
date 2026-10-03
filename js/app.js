@@ -188,6 +188,7 @@ function viewTour(id, tab) {
   if (!t) return `<div class="empty"><p>투어를 찾을 수 없습니다. 삭제되었을 수 있습니다.</p><a class="btn" href="#/">목록으로</a></div>`;
   const c = tourCalc(store, t);
   const body = { orders: tabOrders, cash: tabCash, expenses: tabExpenses, settle: tabSettle, summary: tabSummary }[tab] || tabOrders;
+  if (tab === 'summary' && !window.XLSX) import('./excel.js').then((m) => m.preloadXLSX()).catch(() => {});
   return `
   <div class="tour-head">
     <a class="back" href="#/" aria-label="목록으로">‹</a>
@@ -788,9 +789,12 @@ const actions = {
   export: async () => {
     const t = currentTour(); if (!t) return;
     try {
-      const { exportTour } = await import('./excel.js');
-      await exportTour(store, t);
-    } catch (err) { toast(err.message, 'bad'); }
+      const { exportTour, saveFile } = await import('./excel.js');
+      const file = await exportTour(store, t);
+      if (await saveFile(file) === 'retry') {
+        openSheet({ title: '엑셀 파일 준비됨', body: `<p>${esc(file.name)}</p><p class="muted">아래 버튼을 누르면 저장 창이 열립니다.</p>`, submit: '저장하기', onSubmit: () => { saveFile(file); } });
+      }
+    } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
   },
   'del-tour': async (d) => {
     const t = store.get('tours', d.id);

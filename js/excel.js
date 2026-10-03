@@ -1,6 +1,7 @@
 // 엑셀 내보내기: 기존 양식(CC 시트, PROJECT SETTLEMENT)과 같은 구성으로 만듭니다.
 import { tourCalc, MODES, REGIONS, PAY_METHODS, DENOMS, CURRENCIES, cashOnHand, priceFor } from './calc.js';
 
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 
 function loadXLSX() {
@@ -90,7 +91,34 @@ export async function exportTour(store, tour) {
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exp), '지출 내역');
 
-  XLSX.writeFile(wb, `BDY${tour.bdy}_${tour.region}_${date}.xlsx`);
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new File([data], `BDY${tour.bdy}_${tour.region}_${date}.xlsx`, { type: XLSX_MIME });
+}
+
+// 요약 탭을 열 때 미리 받아 두면, 버튼을 눌렀을 때 바로 저장 창이 뜹니다(아이폰은 누른 직후가 아니면 공유 창을 막습니다).
+export function preloadXLSX() { loadXLSX().catch(() => {}); }
+
+const isMobile = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// 휴대폰: 공유 창(‘파일에 저장’, 카카오톡 등). 그 외: 일반 다운로드.
+// 'share' = 공유 창을 띄움, 'download' = 다운로드, 'retry' = 사용자가 한 번 더 눌러야 함
+export async function saveFile(file) {
+  if (isMobile() && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+      return 'share';
+    } catch (err) {
+      if (err.name === 'AbortError') return 'share';
+      if (err.name === 'NotAllowedError') return 'retry';
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 60000);
+  return 'download';
 }
 
 function round(n) { return Math.round(n * 100) / 100; }

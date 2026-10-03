@@ -26,7 +26,7 @@ async function boot() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
     try {
       await loadScript(SUPABASE_JS);
-      store = new SupabaseStore(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      store = new SupabaseStore(CONFIG.SUPABASE_URL.trim().replace(/\/(rest|auth|realtime)\/v1.*$/, '').replace(/\/+$/, ''), CONFIG.SUPABASE_ANON_KEY.trim());
       const ready = await store.init();
       if (!ready) return renderLogin();
     } catch (err) {

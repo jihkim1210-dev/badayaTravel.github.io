@@ -5,7 +5,6 @@ Badaya Travel 현장 업무용 앱입니다. 투어 고객의 **옵션 주문서
 한 사람이 입력하면 사무실과 다른 직원 휴대폰에도 **바로** 반영됩니다. 그래서 따로 엑셀을 주고받거나 사진을 찍어 보낼 필요가 없습니다.
 
 - 앱 주소: **https://jihkim1210-dev.github.io/badayaTravel.github.io/**
-- 관리자(사무실)용 운영 안내는 [ADMIN_GUIDE.md](ADMIN_GUIDE.md)에 따로 있습니다.
 
 ---
 

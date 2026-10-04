@@ -77,6 +77,8 @@ function route() {
   return { page: parts[0] || 'home', id: parts[1], tab: parts[2] };
 }
 
+const H_SCROLL = '.scroll-x, .tabs';
+let lastRenderKey = '';
 function render() {
   if (!store) return;
   renderTop();
@@ -86,7 +88,12 @@ function render() {
   else if (r.page === 'products') html = viewProducts();
   else if (r.page === 'settings') html = viewSettings();
   else html = viewHome();
+  // 같은 화면을 다시 그릴 때는 옆으로 밀어 둔 표·탭 위치를 그대로 유지 (주문서 표에서 체크할 때마다 왼쪽으로 돌아가지 않게)
+  const key = location.hash;
+  const keep = key === lastRenderKey ? [...$('#view').querySelectorAll(H_SCROLL)].map((el) => el.scrollLeft) : [];
+  lastRenderKey = key;
   $('#view').innerHTML = html;
+  if (keep.length) $('#view').querySelectorAll(H_SCROLL).forEach((el, i) => { if (keep[i]) el.scrollLeft = keep[i]; });
   document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === (r.page === 'tour' ? 'home' : r.page)));
 }
 

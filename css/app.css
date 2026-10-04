@@ -23,7 +23,9 @@
   --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --r: 10px;
-  --nav-h: 44px;
+  --nav-h: 40px;
+  /* 아이폰 아래 홈 막대 여백(약 34px)을 다 쓰지 않고 줄여서 아래 메뉴를 낮게 */
+  --nav-pad: max(4px, calc(env(safe-area-inset-bottom, 0px) - 20px));
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -48,7 +50,7 @@ html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font);
   -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent;
-  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px);
+  padding-bottom: calc(var(--nav-h) + var(--nav-pad) + 16px);
 }
 body.sheet-open { overflow: hidden; }
 h2, h3, h4 { margin: 0; text-wrap: balance; line-height: 1.3; }
@@ -87,7 +89,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center;
   background: var(--surface); border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--nav-pad);
 }
 .nav a { flex: 1; max-width: 160px; height: var(--nav-h); display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--muted); text-decoration: none; }
 .nav a span { font-size: 16px; line-height: 1; }
@@ -200,7 +202,7 @@ body.login .nav { display: none; }
 .chip.m-homeshop i { color: var(--violet); }
 .chip.m-comp { background: var(--gold-soft); border-color: var(--gold); }
 .chip.m-comp i { color: var(--gold); }
-.totalbar { position: sticky; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 14px; background: var(--ink); color: var(--bg); border-radius: var(--r); z-index: 5; }
+.totalbar { position: sticky; bottom: calc(var(--nav-h) + var(--nav-pad) + 8px); display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 14px; background: var(--ink); color: var(--bg); border-radius: var(--r); z-index: 5; }
 .totalbar .fig { font-size: 17px; white-space: normal; text-align: right; }
 
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); margin-top: 12px; }
@@ -277,7 +279,7 @@ textarea, .field input, .field select { width: 100%; padding: 10px 12px; border:
 @keyframes up { from { transform: translateY(24px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
 
-.toasts { position: fixed; left: 16px; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 12px); z-index: 60; display: grid; justify-items: center; gap: 6px; pointer-events: none; }
+.toasts { position: fixed; left: 16px; right: 16px; bottom: calc(var(--nav-h) + var(--nav-pad) + 12px); z-index: 60; display: grid; justify-items: center; gap: 6px; pointer-events: none; }
 .toast { background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: 100%; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
 .toast.good { background: var(--good); color: #fff; }
 .toast.bad { background: var(--bad); color: #fff; }

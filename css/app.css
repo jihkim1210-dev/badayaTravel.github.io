@@ -200,7 +200,7 @@ body.login .nav { display: none; }
 .chip.m-homeshop i { color: var(--violet); }
 .chip.m-comp { background: var(--gold-soft); border-color: var(--gold); }
 .chip.m-comp i { color: var(--gold); }
-.totalbar { position: sticky; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 14px; background: var(--ink); color: var(--bg); border-radius: var(--r); }
+.totalbar { position: sticky; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 14px; background: var(--ink); color: var(--bg); border-radius: var(--r); z-index: 5; }
 .totalbar .fig { font-size: 17px; white-space: normal; text-align: right; }
 
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); margin-top: 12px; }
@@ -294,3 +294,14 @@ textarea, .field input, .field select { width: 100%; padding: 10px 12px; border:
 .chip.more { border-style: dashed; color: var(--accent); background: transparent; font-weight: 600; }
 .settle th small { display: block; }
 .settle td { min-width: 110px; }
+
+/* 휴대폰 가로 화면처럼 세로가 짧을 때: 위 로고 줄과 아래 메뉴를 고정하지 않고 페이지와 함께 움직이게 해서 표가 보이는 공간을 넓힘 */
+@media (max-height: 500px) {
+  body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .topbar { position: static; }
+  .tabs { top: 0; }
+  .tabs a { padding: 7px 12px; }
+  .nav { position: static; margin-top: 16px; }
+  .totalbar { bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
+  .toasts { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+}

@@ -16,6 +16,9 @@ const expanded = new Set();
 let installEvent = null;
 const ui = Object.assign({ orderMode: 'cash', orderView: 'table', onlySel: false, homeFilter: 'open', productRegion: 'DUBAI', extraCur: '' }, ls.get('badaya.ui.v2', {}));
 const saveUI = () => ls.set('badaya.ui.v2', { orderMode: ui.orderMode, orderView: ui.orderView, onlySel: ui.onlySel, homeFilter: ui.homeFilter, productRegion: ui.productRegion });
+// 관리자가 처음 만들어 준 공통 비밀번호. 이걸로 로그인하면 홈에서 바꾸라고 안내
+const DEFAULT_PW = 'Badaya123!';
+const DEFAULT_PW_KEY = 'badaya.defaultpw';
 
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; scheduleRender(); });
 
@@ -145,6 +148,7 @@ function viewHome() {
 
   return `
   ${store.status.mode === 'local' ? `<div class="banner">체험 모드입니다. 데이터는 이 기기에만 저장되고, 같은 기기의 다른 탭과만 실시간으로 맞춰집니다. <a href="#/settings">자세히</a></div>` : ''}
+  ${store.status.mode !== 'local' && ls.get(DEFAULT_PW_KEY) === (store.user?.email || '').toLowerCase() ? `<button class="banner install" data-act="change-pw">기본 비밀번호를 쓰고 있어요. 눌러서 내 비밀번호로 바꿔 주세요.</button>` : ''}
   ${installEvent ? `<button class="banner install" data-act="install">휴대폰에 앱으로 설치하기</button>` : ''}
   <section class="kpis">
     <div class="kpi"><span class="label">오늘 수금</span><strong class="fig">${moneyList(todayPaid, '0')}</strong></div>
@@ -432,7 +436,7 @@ function viewSettings() {
   <section class="card">
     <h3>내 정보</h3>
     <p><strong>${esc(me())}</strong> <span class="pill">${isAdmin() ? '관리자' : '직원'}</span></p>
-    ${local ? '<button class="btn" data-act="set-name">이름 바꾸기</button>' : `<p class="muted">${esc(store.user.email || '')}</p><button class="btn" data-act="sign-out">로그아웃</button>`}
+    ${local ? '<button class="btn" data-act="set-name">이름 바꾸기</button>' : `<p class="muted">${esc(store.user.email || '')}</p><div class="row-actions"><button class="btn" data-act="change-pw">비밀번호 바꾸기</button><button class="btn" data-act="sign-out">로그아웃</button></div>`}
   </section>
   <section class="card">
     <h3>휴대폰에 설치</h3>
@@ -448,6 +452,26 @@ function viewSettings() {
       <div class="row-actions"><button class="btn" data-act="reset-local" data-sample="1">예시 데이터로 되돌리기</button><button class="btn danger" data-act="reset-local" data-sample="0">모두 지우고 빈 상태로</button></div>`
       : `<p>Supabase 서버에 연결되어 있습니다. 상태: <b>${esc($('#conn').textContent)}</b></p>${store.status.pending ? `<p class="warn-t">아직 서버로 보내지 못한 변경 ${store.status.pending}건이 이 기기에 보관되어 있습니다.</p>` : ''}`}
   </section>`;
+}
+
+function sheetPassword() {
+  openSheet({
+    title: '비밀번호 바꾸기', submit: '바꾸기',
+    body: `<label class="field"><span>현재 비밀번호</span><input name="cur" type="password" autocomplete="current-password" required></label>
+      <label class="field"><span>새 비밀번호 (8자 이상)</span><input name="next" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="field"><span>새 비밀번호 확인</span><input name="next2" type="password" autocomplete="new-password" required></label>
+      <p class="muted">비밀번호를 잊으면 관리자에게 다시 정해 달라고 요청하세요.</p>`,
+    onSubmit: async (d) => {
+      if (!d.cur || !d.next) throw new Error('비밀번호를 입력하세요.');
+      if (d.next.length < 8) throw new Error('새 비밀번호는 8자 이상이어야 합니다.');
+      if (d.next !== d.next2) throw new Error('새 비밀번호 두 칸이 서로 다릅니다.');
+      if (d.next === DEFAULT_PW) throw new Error('기본 비밀번호와 다른 비밀번호를 입력하세요.');
+      await store.changePassword(d.cur, d.next);
+      ls.del(DEFAULT_PW_KEY);
+      toast('비밀번호를 바꿨습니다.', 'good');
+      scheduleRender();
+    },
+  });
 }
 
 function renderLogin() {
@@ -469,6 +493,7 @@ function renderLogin() {
     const f = new FormData(e.target);
     try {
       await store.signIn(f.get('email'), f.get('password'));
+      if (f.get('password') === DEFAULT_PW) ls.set(DEFAULT_PW_KEY, String(f.get('email')).trim().toLowerCase()); else ls.del(DEFAULT_PW_KEY);
       location.reload();
     } catch (err) {
       $('#login-err').hidden = false;
@@ -821,6 +846,7 @@ const actions = {
       toast('완료', 'good');
     }
   },
+  'change-pw': () => sheetPassword(),
   'sign-out': () => store.signOut(),
   install: async () => { if (!installEvent) return; installEvent.prompt(); await installEvent.userChoice; installEvent = null; render(); },
 };

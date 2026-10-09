@@ -143,6 +143,15 @@ export class SupabaseStore extends BaseStore {
     const { error } = await this.sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
   }
+  async changePassword(current, next) {
+    const { data } = await this.sb.auth.getUser();
+    const email = data.user?.email;
+    // 현재 비밀번호가 맞는지 먼저 확인
+    const check = await this.sb.auth.signInWithPassword({ email, password: current });
+    if (check.error) throw new Error('현재 비밀번호가 맞지 않습니다.');
+    const { error } = await this.sb.auth.updateUser({ password: next });
+    if (error) throw new Error(error.message.includes('different') ? '지금과 다른 비밀번호를 입력하세요.' : '비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도하세요.');
+  }
   async signOut() {
     await this.sb.auth.signOut();
     ls.del(this.cacheKey);

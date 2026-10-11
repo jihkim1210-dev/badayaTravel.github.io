@@ -174,6 +174,13 @@ export function orderSnapshot(store, tour) {
   return { pax: c.passengers.length, items };
 }
 
+// 주문서 합계 금액 (통화별): 단가 × 주문 수량
+export function orderTotals(items) {
+  const t = {};
+  for (const x of items || []) if (x.qty && x.currency) t[x.currency] = round2((t[x.currency] || 0) + (Number(x.price) || 0) * x.qty);
+  return t;
+}
+
 // 이전 주문 대비 상품별 수량 변화. 바뀐 상품만 돌려줍니다.
 export function orderChanges(prevItems, items) {
   const before = new Map((prevItems || []).map((x) => [x.product_id, x]));

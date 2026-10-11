@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { LocalStore, SupabaseStore, uid, ls } from './store.js';
 import {
   CURRENCIES, REGIONS, TOUR_CODES, DENOMS, MODES, STATUS, EXPENSE_PLACES, EXPENSE_CATEGORIES, PAY_METHODS,
-  money, moneyList, round2, tourCalc, cashOnHand, priceFor, orderSnapshot, orderChanges,
+  money, moneyList, round2, tourCalc, cashOnHand, priceFor, orderSnapshot, orderChanges, orderTotals,
 } from './calc.js';
 
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
@@ -308,10 +308,10 @@ function sheetOrder(t) {
     title: `${version}차 주문하기`,
     submit: '주문하기',
     body: `<p class="muted">BDY ${esc(t.bdy)} · 총 ${snap.pax}명. 아래 수량으로 주문서를 만들어 주문 담당자에게 이메일로 보냅니다.${last ? ' 바뀐 상품은 색으로 표시했습니다.' : ''}</p>
-      <table class="sumtable order-preview"><thead><tr><th>상품</th><th>수량</th>${last ? '<th>이전</th>' : ''}</tr></thead><tbody>
-      ${snap.items.map((x) => { const ch = changes.get(x.product_id); return `<tr class="${ch ? 'chg' : ''}"><th>${esc(x.name)}</th><td class="fig">${x.qty}</td>${last ? `<td class="fig muted">${ch ? ch.before : x.qty}</td>` : ''}</tr>`; }).join('')}
-      ${gone.map((x) => `<tr class="chg"><th>${esc(x.name)}</th><td class="fig">0</td><td class="fig muted">${x.before}</td></tr>`).join('')}
-      </tbody></table>
+      <table class="sumtable order-preview"><thead><tr><th>상품</th><th>수량</th><th>금액</th>${last ? '<th>이전</th>' : ''}</tr></thead><tbody>
+      ${snap.items.map((x) => { const ch = changes.get(x.product_id); return `<tr class="${ch ? 'chg' : ''}"><th>${esc(x.name)}</th><td class="fig">${x.qty}</td><td class="fig">${money(x.price * x.qty, x.currency)}</td>${last ? `<td class="fig muted">${ch ? ch.before : x.qty}</td>` : ''}</tr>`; }).join('')}
+      ${gone.map((x) => `<tr class="chg"><th>${esc(x.name)}</th><td class="fig">0</td><td></td><td class="fig muted">${x.before}</td></tr>`).join('')}
+      </tbody><tfoot><tr><th>합계</th><td class="fig">${snap.items.reduce((s, x) => s + x.qty, 0)}</td><td class="fig">${moneyList(orderTotals(snap.items), '0')}</td>${last ? '<td></td>' : ''}</tr></tfoot></table>
       <label class="field"><span>남길 말 (선택)</span><textarea name="note" rows="2" placeholder="예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소"></textarea></label>`,
     onSubmit: async (d) => {
       const req = await store.put('order_requests', { id: uid(), tour_id: t.id, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
@@ -331,7 +331,7 @@ async function emailOrder(t, req) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    await store.sendOrderEmail({ tour_id: t.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty]) });
+    await store.sendOrderEmail({ tour_id: t.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty, money(x.price * x.qty, x.currency)]), total: moneyList(orderTotals(req.items), '0') });
     await store.patch('order_requests', req.id, { emailed_at: new Date().toISOString() });
     toast(`${req.version}차 주문서를 이메일로 보냈습니다.`, 'good');
   } catch (err) {

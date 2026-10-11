@@ -1,5 +1,5 @@
 // 엑셀 내보내기: 기존 양식(CC 시트, PROJECT SETTLEMENT)과 같은 구성으로 만듭니다.
-import { tourCalc, MODES, REGIONS, PAY_METHODS, DENOMS, CURRENCIES, cashOnHand, priceFor, orderChanges } from './calc.js';
+import { tourCalc, MODES, REGIONS, PAY_METHODS, DENOMS, CURRENCIES, cashOnHand, priceFor, orderChanges, orderTotals } from './calc.js';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
@@ -118,18 +118,22 @@ export async function exportOrder(tour, req, prevItems) {
   a.push(['총원', req.pax, '', '', '', '', '', '']);
   if (req.note) a.push(['메모', req.note]);
   a.push([]);
-  a.push(['No', '상품', '단가', '통화', '주문 수량', ...modeKeys.map((k) => MODES[k].label), '티켓 수 (결합 ×2)', ...(prevItems ? ['이전 주문', '변경'] : [])]);
+  a.push(['No', '상품', '단가', '통화', '주문 수량', '금액 (단가×수량)', ...modeKeys.map((k) => MODES[k].label), '티켓 수 (결합 ×2)', ...(prevItems ? ['이전 주문', '변경'] : [])]);
   const rows = [...req.items];
   // 이전 주문에는 있었는데 이번에 0이 된 상품도 보이도록
   for (const x of changes) if (!rows.some((r) => r.product_id === x.product_id)) rows.push({ product_id: x.product_id, name: x.name, price: '', currency: '', qty: 0, modes: {}, units: 1, customers: [] });
   rows.forEach((it, i) => {
     const ch = changed.get(it.product_id);
-    a.push([i + 1, it.name, it.price, it.currency, it.qty, ...modeKeys.map((k) => it.modes?.[k] || ''), it.qty * (it.units || 1),
+    a.push([i + 1, it.name, it.price, it.currency, it.qty, it.price === '' ? '' : round(Number(it.price) * it.qty), ...modeKeys.map((k) => it.modes?.[k] || ''), it.qty * (it.units || 1),
       ...(prevItems ? [ch ? ch.before : it.qty, ch ? (ch.after - ch.before > 0 ? '+' : '') + (ch.after - ch.before || '명단 변경') : ''] : [])]);
   });
-  a.push(['', '합계', '', '', req.items.reduce((s, x) => s + x.qty, 0), ...modeKeys.map((k) => req.items.reduce((s, x) => s + (x.modes?.[k] || 0), 0)), req.items.reduce((s, x) => s + x.qty * (x.units || 1), 0)]);
+  // 합계 금액은 통화별로 한 줄씩 (이집트는 EUR + USD)
+  const totals = orderTotals(req.items);
+  const curs = Object.keys(totals);
+  a.push(['', '합계', '', curs.length === 1 ? curs[0] : '', req.items.reduce((s, x) => s + x.qty, 0), curs.length === 1 ? totals[curs[0]] : '', ...modeKeys.map((k) => req.items.reduce((s, x) => s + (x.modes?.[k] || 0), 0)), req.items.reduce((s, x) => s + x.qty * (x.units || 1), 0)]);
+  if (curs.length > 1) for (const c of curs) a.push(['', `합계 금액 (${c})`, '', c, '', totals[c]]);
   const ws = XLSX.utils.aoa_to_sheet(a);
-  ws['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, ...modeKeys.map(() => ({ wch: 8 })), { wch: 14 }, { wch: 10 }, { wch: 10 }];
+  ws['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 16 }, ...modeKeys.map(() => ({ wch: 8 })), { wch: 14 }, { wch: 10 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(wb, ws, '주문서');
 
   const b = [['상품', 'No', '그룹', '이름', '영문', '구분']];

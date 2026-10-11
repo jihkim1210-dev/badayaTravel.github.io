@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   const { data: { user } } = await userDb.auth.getUser(auth.replace(/^Bearer\s+/i, ''));
   if (!user) return json({ error: '로그인이 필요합니다.' }, 401);
 
-  let body: { tour_id?: string; version?: number; filename?: string; file?: string; note?: string; lines?: [string, number][] };
+  let body: { tour_id?: string; version?: number; filename?: string; file?: string; note?: string; lines?: [string, number, string?][]; total?: string };
   try { body = await req.json(); } catch { return json({ error: '잘못된 요청입니다.' }, 400); }
   const { tour_id, version, filename, file } = body;
   if (!tour_id || !filename || !file || !/\.xlsx$/i.test(filename)) return json({ error: '주문서 파일이 없습니다.' }, 400);
@@ -47,7 +47,8 @@ Deno.serve(async (req) => {
 
   const who = prof?.name || user.email;
   const v = Number(version) || 1;
-  const lines = (body.lines || []).slice(0, 200).map(([n, q]) => `- ${String(n).slice(0, 100)}: ${Number(q) || 0}`);
+  const lines = (body.lines || []).slice(0, 200).map(([n, q, amt]) => `- ${String(n).slice(0, 100)}: ${Number(q) || 0}${amt ? ` (${String(amt).slice(0, 40)})` : ''}`);
+  if (body.total) lines.push(`합계 금액: ${String(body.total).slice(0, 100)}`);
   const text = [
     [`BDY ${tour.bdy}`, tour.region, tour.tour_code, tour.start_date].filter(Boolean).join(' · '),
     `${v}차 주문 · 보낸 사람 ${who} (${user.email})`,

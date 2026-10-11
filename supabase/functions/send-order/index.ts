@@ -55,8 +55,6 @@ Deno.serve(async (req) => {
     '',
     ...lines,
     ...(body.note ? ['', '남긴 말: ' + String(body.note).slice(0, 1000)] : []),
-    '',
-    '첨부한 엑셀 파일에 고객 명단이 있습니다.',
   ].join('\n');
 
   const res = await fetch('https://api.resend.com/emails', {

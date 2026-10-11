@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>주문 확인 · Badaya Field</title>
+<link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .confirm { max-width: 420px; margin: 12vh auto 0; padding: 28px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; text-align: center; }
+  .confirm img { height: 40px; margin-bottom: 14px; }
+  .confirm p { margin: 10px 0; }
+  .confirm .btn { width: 100%; margin-top: 14px; }
+  body { padding: 0 16px; }
+</style>
+</head>
+<body>
+<!-- 주문 담당자가 이메일의 '주문 확인' 버튼을 누르면 열리는 페이지. 버튼을 한 번 더 눌러야 확인 처리됩니다
+     (메일 보안 프로그램이 링크를 미리 열어 봐도 저절로 확인되지 않게). -->
+<main class="confirm">
+  <img src="icons/logo.svg" alt="Badaya Field">
+  <p id="msg">주문서를 확인 처리할까요?<br><span class="muted">직원 앱에 '관리자 확인'으로 표시됩니다.</span></p>
+  <button class="btn primary" id="go">주문 확인</button>
+</main>
+<script type="module">
+import { CONFIG } from './js/config.js';
+const q = new URLSearchParams(location.search);
+const msg = document.getElementById('msg');
+const go = document.getElementById('go');
+const show = (html) => { msg.innerHTML = html; };
+if (!q.get('id') || !q.get('t') || !CONFIG.SUPABASE_URL) { show('확인 링크가 올바르지 않습니다.'); go.style.display = "none"; }
+go.addEventListener('click', async () => {
+  go.disabled = true; go.textContent = '처리 중…';
+  try {
+    const base = CONFIG.SUPABASE_URL.trim().replace(/\/+$/, '');
+    const key = CONFIG.SUPABASE_ANON_KEY.trim();
+    const res = await fetch(`${base}/functions/v1/send-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: key, Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ confirm: q.get('id'), t: q.get('t') }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || '확인 처리하지 못했습니다.');
+    const when = d.received_at ? new Date(d.received_at).toLocaleString('ko-KR') : '';
+    const what = `BDY ${d.bdy || ''} ${d.version || ''}차 주문서`;
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    show(d.already ? `${esc(what)}는 이미 확인됐습니다.<br><span class="muted">${esc(when)}</span>` : `<b>${esc(what)}</b>를 확인 처리했습니다.<br><span class="muted">${esc(when)}</span>`);
+    go.style.display = "none";
+  } catch (err) {
+    show(String(err.message || err).replace(/</g, '&lt;'));
+    go.disabled = false; go.textContent = '다시 시도';
+  }
+});
+</script>
+</body>
+</html>

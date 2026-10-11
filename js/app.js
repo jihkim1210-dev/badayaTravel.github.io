@@ -338,7 +338,7 @@ async function emailOrder(t, req) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    await store.sendOrderEmail({ tour_id: t.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty, money(x.price * x.qty, x.currency)]), total: moneyList(orderTotals(req.items), '0') });
+    await store.sendOrderEmail({ tour_id: t.id, request_id: req.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty, money(x.price * x.qty, x.currency)]), total: moneyList(orderTotals(req.items), '0') });
     await store.patch('order_requests', req.id, { emailed_at: new Date().toISOString() });
     toast(`${req.version}차 주문서를 이메일로 보냈습니다.`, 'good');
   } catch (err) {

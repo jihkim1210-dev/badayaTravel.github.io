@@ -1,5 +1,19 @@
 // 기본 상품표. 이집트는 'PROJECT SETTLEMENT - EGYPT' / CC 시트, 두바이는 직원 HTML 시안의 가격을 AED로 옮겼습니다(팁만 USD).
 // units: 엑셀 '총 옵션 합계'에서 2개로 세던 결합 상품.
+// 영어 화면·엑셀에서 쓰는 상품 이름 (이미 영어인 상품은 없음)
+const NAME_EN = {
+  '피라미드 내부 탐험 + 문명박물관': 'Pyramid Interior + Civilization Museum',
+  '피라미드 내부 탐험': 'Pyramid Interior',
+  '문명박물관': 'Civilization Museum',
+  '마차투어 + 룩소르 신전': 'Carriage Ride + Luxor Temple',
+  '세티 1세의 무덤': 'Tomb of Seti I',
+  '필레신전 + 아스완댐 보트': 'Philae Temple + Aswan Dam Boat',
+  '덴데라 + 사막 사파리': 'Dendera + Desert Safari',
+  '덴데라 신전': 'Dendera Temple',
+  '사막 사파리': 'Desert Safari',
+  '투탕카멘의 무덤 내부 관람': "Inside Tutankhamun's Tomb",
+  '부르즈 칼리파 전망대': 'Burj Khalifa Observation Deck',
+};
 export const DEFAULT_PRODUCTS = [
   ['EGYPT', 'Tour Expense', 90, 'EUR', 1, [90, 100]],
   ['EGYPT', 'Cruise Tips', 15, 'USD', 1],
@@ -36,7 +50,7 @@ export const DEFAULT_PRODUCTS = [
   ['DUBAI', 'Tips', 0, 'USD', 1, null, false], // 팁은 USD. 1인당 금액을 정한 뒤 상품 화면에서 가격 입력·표시
 ].map(([region, name, price, currency, units, rates, active = true], i) => ({
   id: 'prd-' + region.toLowerCase() + '-' + String(i + 1).padStart(2, '0'),
-  region, name, price, currency, units, rates: rates || null, sort: (i + 1) * 10, active,
+  region, name, name_en: NAME_EN[name] || null, price, currency, units, rates: rates || null, sort: (i + 1) * 10, active,
 }));
 
 // 체험 모드에서만 쓰는 예시 투어 (실제 고객 정보 아님)

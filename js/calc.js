@@ -18,6 +18,9 @@ export const DENOMS = {
   EGP: [200, 100, 50, 20, 10, 5],
 };
 
+// 화면에 보이는 이름(label 등)은 한국어 원문이며, 영어 화면에서는 i18n.js 의 t() 로 바꿔 보여줍니다.
+// 지출 장소·항목처럼 데이터에 저장되는 값은 항상 한국어로 저장합니다.
+
 // 주문 상태. 엑셀 CC 시트에서 현금은 1, 그 외(선결제·홈쇼핑·보상)는 0 으로 표기하던 방식.
 export const MODES = {
   cash: { label: '현금', mark: '●', charged: true },
@@ -167,7 +170,7 @@ export function orderSnapshot(store, tour) {
       if (o) customers.push({ g: row.p.group_no || 0, n: row.p.name_kor || '', e: row.p.name_eng || '', m: o.mode });
     }
     items.push({
-      product_id: r.product.id, name: r.product.name, currency: r.product.currency, price: priceFor(tour, r.product),
+      product_id: r.product.id, name: r.product.name, name_en: r.product.name_en || null, currency: r.product.currency, price: priceFor(tour, r.product),
       units: r.product.units || 1, qty: r.applied, modes: r.modes, customers,
     });
   }
@@ -191,7 +194,7 @@ export function orderChanges(prevItems, items) {
     const bq = b?.qty || 0, aq = a?.qty || 0;
     const modesChanged = JSON.stringify(b?.modes || {}) !== JSON.stringify(a?.modes || {});
     const namesChanged = (b?.customers || []).map((x) => x.n + x.m).join() !== (a?.customers || []).map((x) => x.n + x.m).join();
-    if (bq !== aq || modesChanged || namesChanged) out.push({ product_id: id, name: (a || b).name, before: bq, after: aq });
+    if (bq !== aq || modesChanged || namesChanged) out.push({ product_id: id, name: (a || b).name, name_en: (a || b).name_en || null, before: bq, after: aq });
   }
   return out;
 }

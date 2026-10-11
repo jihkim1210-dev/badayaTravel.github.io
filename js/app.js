@@ -4,6 +4,7 @@ import {
   CURRENCIES, REGIONS, TOUR_CODES, DENOMS, MODES, STATUS, EXPENSE_PLACES, EXPENSE_CATEGORIES, PAY_METHODS,
   money, moneyList, round2, tourCalc, cashOnHand, priceFor, orderSnapshot, orderChanges, orderTotals,
 } from './calc.js';
+import { t as tr, getLang, setLang, locale, pname } from './i18n.js';
 
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
 
@@ -24,6 +25,7 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 /* ---------- 부팅 ---------- */
 
 async function boot() {
+  applyLang();
   bindEvents();
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
     try {
@@ -32,7 +34,7 @@ async function boot() {
       const ready = await store.init();
       if (!ready) return renderLogin();
     } catch (err) {
-      $('#view').innerHTML = `<div class="empty"><p>서버에 연결하지 못했습니다.</p><p class="muted">${esc(err.message)}</p><button class="btn" onclick="location.reload()">다시 시도</button></div>`;
+      $('#view').innerHTML = `<div class="empty"><p>${tr('서버에 연결하지 못했습니다.')}</p><p class="muted">${esc(err.message)}</p><button class="btn" onclick="location.reload()">${tr('다시 시도')}</button></div>`;
       return;
     }
   } else {
@@ -52,7 +54,7 @@ function loadScript(src) {
     const s = document.createElement('script');
     s.src = src;
     s.onload = resolve;
-    s.onerror = () => reject(new Error('필요한 파일을 불러오지 못했습니다. 인터넷 연결을 확인하세요.'));
+    s.onerror = () => reject(new Error(tr('필요한 파일을 불러오지 못했습니다. 인터넷 연결을 확인하세요.')));
     document.head.appendChild(s);
   });
 }
@@ -101,11 +103,11 @@ function render() {
 
 function renderTop() {
   const s = store.status;
-  let cls = 'ok', text = '실시간 연결';
-  if (s.mode === 'local') { cls = 'demo'; text = '체험 모드'; }
-  else if (!s.online) { cls = 'bad'; text = s.pending ? `오프라인 · 대기 ${s.pending}건` : '오프라인'; }
-  else if (s.pending) { cls = 'warn'; text = `전송 중 ${s.pending}건`; }
-  else if (!s.realtime) { cls = 'warn'; text = '연결 중'; }
+  let cls = 'ok', text = tr('실시간 연결');
+  if (s.mode === 'local') { cls = 'demo'; text = tr('체험 모드'); }
+  else if (!s.online) { cls = 'bad'; text = s.pending ? tr('오프라인 · 대기 {n}건', { n: s.pending }) : tr('오프라인'); }
+  else if (s.pending) { cls = 'warn'; text = tr('전송 중 {n}건', { n: s.pending }); }
+  else if (!s.realtime) { cls = 'warn'; text = tr('연결 중'); }
   $('#conn').className = 'conn ' + cls;
   $('#conn').textContent = text;
   $('#who').textContent = store.user?.name || '';
@@ -115,27 +117,33 @@ const isAdmin = () => store.user?.role === 'admin';
 // 주문 담당자: 받은 주문서만 보고 확인할 수 있음 (투어 내용은 볼 수 없음)
 const isOrderManager = () => !!store.user?.order_manager;
 const canReceiveOrders = () => isAdmin() || isOrderManager();
-const me = () => store.user?.name || '직원';
+const me = () => store.user?.name || tr('직원');
 
 function timeAgo(iso) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return '방금';
-  if (s < 3600) return Math.floor(s / 60) + '분 전';
-  if (s < 86400) return Math.floor(s / 3600) + '시간 전';
-  return new Date(iso).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  if (s < 60) return tr('방금');
+  if (s < 3600) return tr('{n}분 전', { n: Math.floor(s / 60) });
+  if (s < 86400) return tr('{n}시간 전', { n: Math.floor(s / 3600) });
+  return new Date(iso).toLocaleDateString(locale(), { month: 'short', day: 'numeric' });
 }
 
 function tourTitle(t) { return `BDY ${esc(t.bdy)}`; }
-function statusPill(t) { return `<span class="pill st-${esc(t.status)}">${STATUS[t.status]?.label || esc(t.status)}</span>`; }
+function statusPill(t) { return `<span class="pill st-${esc(t.status)}">${STATUS[t.status] ? tr(STATUS[t.status].label) : esc(t.status)}</span>`; }
 const cloud = () => store.status.mode !== 'local';
 function ownerName(id) {
-  if (!id) return '담당자 없음';
+  if (!id) return tr('담당자 없음');
   if (id === store.user?.id) return me();
-  return store.get('profiles', id)?.name || '알 수 없음';
+  return store.get('profiles', id)?.name || tr('알 수 없음');
 }
 // 이 투어에서 관리자에게 보낸 주문서 (최신 차수가 먼저)
 const tourRequests = (tid) => store.all('order_requests').filter((r) => r.tour_id === tid).sort((a, b) => (b.version || 0) - (a.version || 0) || String(b.created_at).localeCompare(String(a.created_at)));
-const shortTime = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const shortTime = (iso) => new Date(iso).toLocaleString(locale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const regionLabel = (r) => (REGIONS[r] ? tr(REGIONS[r].label) : r);
+// 지출 장소·항목은 한국어로 저장. 기본 목록에 있는 값만 번역해서 보여줌 (직접 입력한 항목은 그대로)
+const valLabel = (v) => ([...EXPENSE_PLACES, ...EXPENSE_CATEGORIES].includes(v) ? tr(v) : v ?? '');
+// 저장된 주문서 항목의 상품 이름 (영문 이름이 없는 예전 주문서는 지금 상품표에서 찾음)
+const itemName = (x) => (getLang() === 'en' ? x.name_en || store.get('products', x.product_id)?.name_en || x.name : x.name);
+const withEn = (items) => (items || []).map((x) => (x.name_en ? x : { ...x, name_en: store.get('products', x.product_id)?.name_en || null }));
 
 /* ---------- 홈 ---------- */
 
@@ -155,35 +163,35 @@ function viewHome() {
     ...store.all('expenses').map((e) => ({ ...e, _k: 'exp' })),
   ].filter((x) => tourById.has(x.tour_id)).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8);
   const pax = (id) => store.get('passengers', id);
-  const filters = [['open', '진행중'], ['submitted', '정산 제출'], ['closed', '완료'], ['all', '전체']];
+  const filters = [['open', tr('진행중')], ['submitted', tr('정산 제출')], ['closed', tr('완료')], ['all', tr('전체')]];
 
   return `
-  ${store.status.mode === 'local' ? `<div class="banner">체험 모드입니다. 데이터는 이 기기에만 저장되고, 같은 기기의 다른 탭과만 실시간으로 맞춰집니다. <a href="#/settings">자세히</a></div>` : ''}
-  ${installEvent ? `<button class="banner install" data-act="install">휴대폰에 앱으로 설치하기</button>` : ''}
+  ${store.status.mode === 'local' ? `<div class="banner">${tr('체험 모드입니다. 데이터는 이 기기에만 저장되고, 같은 기기의 다른 탭과만 실시간으로 맞춰집니다.')} <a href="#/settings">${tr('자세히')}</a></div>` : ''}
+  ${installEvent ? `<button class="banner install" data-act="install">${tr('휴대폰에 앱으로 설치하기')}</button>` : ''}
   <section class="kpis">
-    <div class="kpi"><span class="label">오늘 수금</span><strong class="fig">${moneyList(todayPaid, '0')}</strong></div>
-    <div class="kpi"><span class="label">진행중 투어 미수금</span><strong class="fig ${Object.keys(openOutstanding).length ? 'warn-t' : ''}">${moneyList(openOutstanding, '없음')}</strong></div>
+    <div class="kpi"><span class="label">${tr('오늘 수금')}</span><strong class="fig">${moneyList(todayPaid, '0')}</strong></div>
+    <div class="kpi"><span class="label">${tr('진행중 투어 미수금')}</span><strong class="fig ${Object.keys(openOutstanding).length ? 'warn-t' : ''}">${moneyList(openOutstanding, tr('없음'))}</strong></div>
   </section>
   ${canReceiveOrders() ? orderInbox() : ''}
   <div class="row-head">
-    <h2>투어</h2>
-    <button class="btn primary" data-act="new-tour">+ 새 투어</button>
+    <h2>${tr('투어')}</h2>
+    <button class="btn primary" data-act="new-tour">${tr('+ 새 투어')}</button>
   </div>
   <div class="seg" role="tablist">${filters.map(([k, l]) => `<button class="${ui.homeFilter === k ? 'on' : ''}" data-act="filter" data-f="${k}">${l}</button>`).join('')}</div>
   <div class="tour-list">
-    ${shown.length ? shown.map(tourCard).join('') : `<div class="empty"><p>이 목록에 투어가 없습니다.</p><p class="muted">‘+ 새 투어’로 BDY 번호를 등록하면 바로 주문서를 쓸 수 있습니다.</p></div>`}
+    ${shown.length ? shown.map(tourCard).join('') : `<div class="empty"><p>${tr('이 목록에 투어가 없습니다.')}</p><p class="muted">${tr('‘+ 새 투어’로 BDY 번호를 등록하면 바로 주문서를 쓸 수 있습니다.')}</p></div>`}
   </div>
-  <h2 class="sec">최근 기록</h2>
+  <h2 class="sec">${tr('최근 기록')}</h2>
   <ul class="feed">
     ${feed.length ? feed.map((x) => {
       const t = tourById.get(x.tour_id);
-      const who = x._k === 'pay' ? (pax(x.passenger_id)?.name_kor || '공통') : `${esc(x.place)} · ${esc(x.category)}`;
+      const who = x._k === 'pay' ? (pax(x.passenger_id)?.name_kor || tr('공통')) : `${valLabel(x.place)} · ${valLabel(x.category)}`;
       return `<li><a href="#/tour/${esc(t.id)}/${x._k === 'pay' ? 'cash' : 'expenses'}">
-        <span class="tag ${x._k}">${x._k === 'pay' ? '수금' : '지출'}</span>
+        <span class="tag ${x._k}">${x._k === 'pay' ? tr('수금§tag') : tr('지출§tag')}</span>
         <span class="feed-main">${tourTitle(t)} · ${esc(who)}</span>
         <span class="fig ${x._k === 'pay' ? 'good-t' : ''}">${x._k === 'pay' ? '+' : '−'}${money(x.amount, x.currency)}</span>
         <span class="feed-meta">${esc(x.created_by || '')} · ${timeAgo(x.created_at)}</span></a></li>`;
-    }).join('') : '<li class="muted">아직 기록이 없습니다.</li>'}
+    }).join('') : `<li class="muted">${tr('아직 기록이 없습니다.')}</li>`}
   </ul>`;
 }
 
@@ -204,16 +212,16 @@ function orderInbox() {
   if (!reqs.length) return '';
   const fresh = reqs.filter((r) => r.status !== 'received');
   const shown = [...fresh, ...reqs.filter((r) => r.status === 'received').slice(0, Math.max(0, 5 - fresh.length))];
-  return `<h2 class="sec">받은 주문서 ${fresh.length ? `<span class="pill st-open">새 주문 ${fresh.length}</span>` : ''}</h2>
+  return `<h2 class="sec">${tr('받은 주문서')} ${fresh.length ? `<span class="pill st-open">${tr('새 주문 {n}', { n: fresh.length })}</span>` : ''}</h2>
   <ul class="list inbox">${shown.map((r) => {
     const t = reqTour(r);
     if (!t) return '';
-    const head = `<strong>${tourTitle(t)} · ${esc(r.version)}차 주문</strong>
-        <span class="muted">${esc(r.created_by || '')} · ${shortTime(r.created_at)} · ${r.items.reduce((s, x) => s + x.qty, 0)}건${r.note ? ' · ' + esc(r.note) : ''}</span>`;
+    const head = `<strong>${tourTitle(t)} · ${tr('{v}차 주문', { v: esc(r.version) })}</strong>
+        <span class="muted">${esc(r.created_by || '')} · ${shortTime(r.created_at)} · ${tr('{n}건', { n: r.items.reduce((s, x) => s + x.qty, 0) })}${r.note ? ' · ' + esc(r.note) : ''}</span>`;
     return `<li class="${r.status === 'received' ? 'done' : 'new'}">
       ${store.get('tours', r.tour_id) ? `<a class="li-main" href="#/tour/${esc(t.id)}/orders">${head}</a>` : `<div class="li-main">${head}</div>`}
-      <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
-      ${r.status === 'received' ? '<span class="paid-ok">확인</span>' : `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>`}
+      <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">${tr('엑셀')}</button>
+      ${r.status === 'received' ? `<span class="paid-ok">${tr('확인§done')}</span>` : `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">${tr('확인')}</button>`}
     </li>`;
   }).join('')}</ul>`;
 }
@@ -224,11 +232,12 @@ function tourCard(t) {
   const due = c.due[cur] || 0, paid = c.paid[cur] || 0;
   const pct = due ? Math.min(100, Math.round((paid / due) * 100)) : 0;
   return `<a class="tour-card" href="#/tour/${esc(t.id)}/orders">
-    <div class="tc-top"><strong class="bdy">${tourTitle(t)}</strong>${isAdmin() && tourRequests(t.id)[0]?.status === 'sent' ? '<span class="pill st-open">새 주문서</span>' : ''}${statusPill(t)}</div>
-    <div class="tc-meta">${REGIONS[t.region]?.label || esc(t.region)} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '날짜 미정')} · ${esc(t.guide || '')}${isAdmin() && cloud() ? ` · 담당 ${esc(ownerName(t.owner_id))}` : ''}</div>
-    <div class="tc-figs"><span>${c.passengers.length}명</span><span>판매 ${money(due, cur)}</span><span>수금 ${money(paid, cur)}</span></div>
-    <div class="bar" aria-label="수금률 ${pct}%"><i style="width:${pct}%"></i></div>
-    ${Object.keys(c.outstanding).length ? `<div class="tc-due">미수 ${moneyList(c.outstanding)}</div>` : ''}
+    <div class="tc-top"><strong class="bdy">${tourTitle(t)}</strong>${isAdmin() && tourRequests(t.id)[0]?.status === 'sent' ? `<span class="pill st-open">${tr('새 주문서')}</span>` : ''}${statusPill(t)}</div>
+    <div class="tc-meta">${esc(regionLabel(t.region))} · ${esc(t.tour_code || '')} · ${esc(t.start_date || tr('날짜 미정'))} · ${esc(t.guide || '')}${isAdmin() && cloud() ? ` · ${tr('담당 {name}', { name: esc(ownerName(t.owner_id)) })}` : ''}</div>
+    <div class="tc-figs"><span>${tr('{n}명', { n: c.passengers.length })}</span><span>${tr('판매 {amt}', { amt: money(due, cur) })}</span><span>${tr('수금 {amt}', { amt: money(paid, cur) })}</span></div>
+    <div class="bar" aria-label="${tr('수금률 {pct}%', { pct })}"><i style="width:${pct}%"></i></div>
+    ${Object.keys(c.outstanding).length ? `<div class="tc-due">${tr('미수 {amt}', { amt: moneyList(c.outstanding) })}</div>` : ''}
+
   </a>`;
 }
 
@@ -238,22 +247,22 @@ const TABS = [['orders', '주문서'], ['cash', '수금'], ['expenses', '지출'
 
 function viewTour(id, tab) {
   const t = store.get('tours', id);
-  if (!t) return `<div class="empty"><p>투어를 찾을 수 없습니다. 삭제되었을 수 있습니다.</p><a class="btn" href="#/">목록으로</a></div>`;
+  if (!t) return `<div class="empty"><p>${tr('투어를 찾을 수 없습니다. 삭제되었을 수 있습니다.')}</p><a class="btn" href="#/">${tr('목록으로')}</a></div>`;
   const c = tourCalc(store, t);
   const body = { orders: tabOrders, cash: tabCash, expenses: tabExpenses, settle: tabSettle, summary: tabSummary }[tab] || tabOrders;
   if ((tab === 'summary' || tab === 'orders') && !window.XLSX) import('./excel.js').then((m) => m.preloadXLSX()).catch(() => {});
   return `
   <div class="tour-head">
-    <a class="back" href="#/" aria-label="목록으로">‹</a>
+    <a class="back" href="#/" aria-label="${tr('목록으로')}">‹</a>
     <div class="th-main">
       <div class="th-title"><strong class="bdy">${tourTitle(t)}</strong>${statusPill(t)}</div>
-      <div class="tc-meta">${REGIONS[t.region]?.label || ''} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '')} · ${esc(t.guide || '')} · ${c.passengers.length}명${isAdmin() && cloud() ? ` · 담당 ${esc(ownerName(t.owner_id))}` : ''}${c.products.filter((p) => p.rates?.length > 1).map((p) => ` · ${esc(p.name)} ${money(priceFor(t, p), p.currency)}`).join('')}</div>
+      <div class="tc-meta">${REGIONS[t.region] ? tr(REGIONS[t.region].label) : ''} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '')} · ${esc(t.guide || '')} · ${tr('{n}명', { n: c.passengers.length })}${isAdmin() && cloud() ? ` · ${tr('담당 {name}', { name: esc(ownerName(t.owner_id)) })}` : ''}${c.products.filter((p) => p.rates?.length > 1).map((p) => ` · ${esc(pname(p))} ${money(priceFor(t, p), p.currency)}`).join('')}</div>
     </div>
-    <button class="icon-btn" data-act="edit-tour" data-id="${esc(t.id)}" aria-label="투어 정보 수정">✎</button>
-    ${isAdmin() || t.owner_id === store.user?.id ? `<button class="icon-btn trash ${canDeleteTour(t) ? '' : 'dim'}" data-act="del-tour" data-id="${esc(t.id)}" aria-label="투어 삭제"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5M10 11v5.5M14 11v5.5"/></svg></button>` : ''}
+    <button class="icon-btn" data-act="edit-tour" data-id="${esc(t.id)}" aria-label="${tr('투어 정보 수정')}">✎</button>
+    ${isAdmin() || t.owner_id === store.user?.id ? `<button class="icon-btn trash ${canDeleteTour(t) ? '' : 'dim'}" data-act="del-tour" data-id="${esc(t.id)}" aria-label="${tr('투어 삭제')}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5M10 11v5.5M14 11v5.5"/></svg></button>` : ''}
   </div>
-  ${t.status === 'closed' ? `<div class="banner lock">정산 완료된 투어라 수정할 수 없습니다.${isAdmin() ? ' 정산 탭에서 다시 열 수 있습니다.' : ''}</div>` : ''}
-  <nav class="tabs">${TABS.map(([k, l]) => `<a class="${tab === k ? 'on' : ''}" href="#/tour/${esc(t.id)}/${k}">${l}</a>`).join('')}</nav>
+  ${t.status === 'closed' ? `<div class="banner lock">${tr('정산 완료된 투어라 수정할 수 없습니다.')}${isAdmin() ? tr(' 정산 탭에서 다시 열 수 있습니다.') : ''}</div>` : ''}
+  <nav class="tabs">${TABS.map(([k, l]) => `<a class="${tab === k ? 'on' : ''}" href="#/tour/${esc(t.id)}/${k}">${tr(l)}</a>`).join('')}</nav>
   <div class="tab-body">${body(t, c)}</div>`;
 }
 
@@ -264,27 +273,28 @@ function canDeleteTour(t) {
 }
 
 function locked(t) {
-  if (t.status === 'closed') { toast('정산 완료된 투어입니다. 다시 연 뒤 수정하세요.', 'bad'); return true; }
+  if (t.status === 'closed') { toast(tr('정산 완료된 투어입니다. 다시 연 뒤 수정하세요.'), 'bad'); return true; }
   return false;
 }
 
 function tabOrders(t, c) {
-  if (!c.products.length) return `<div class="empty"><p>${REGIONS[t.region]?.label} 지역에 등록된 상품이 없습니다.</p><a class="btn" href="#/products">상품 등록하기</a></div>`;
+  if (!c.products.length) return `<div class="empty"><p>${tr('{region} 지역에 등록된 상품이 없습니다.', { region: REGIONS[t.region] ? tr(REGIONS[t.region].label) : undefined })}</p><a class="btn" href="#/products">${tr('상품 등록하기')}</a></div>`;
   const modeBar = `
   <div class="modebar">
-    <span class="label">누르면</span>
-    <div class="seg modes">${Object.entries(MODES).map(([k, m]) => `<button class="m-${k} ${ui.orderMode === k ? 'on' : ''}" data-act="mode" data-mode="${k}">${m.label}</button>`).join('')}</div>
-    ${ui.orderView === 'cards' ? `<label class="check-field small"><input type="checkbox" id="only-sel" data-act="only-sel" ${ui.onlySel ? 'checked' : ''}> 선택한 상품만</label>` : ''}
-    <div class="seg small">${[['table', '표'], ['cards', '카드']].map(([k, l]) => `<button class="${ui.orderView === k ? 'on' : ''}" data-act="order-view" data-v="${k}">${l}</button>`).join('')}</div>
+    <span class="label">${tr('누르면')}</span>
+    <div class="seg modes">${Object.entries(MODES).map(([k, m]) => `<button class="m-${k} ${ui.orderMode === k ? 'on' : ''}" data-act="mode" data-mode="${k}">${tr(m.label)}</button>`).join('')}</div>
+    ${ui.orderView === 'cards' ? `<label class="check-field small"><input type="checkbox" id="only-sel" data-act="only-sel" ${ui.onlySel ? 'checked' : ''}> ${tr('선택한 상품만')}</label>` : ''}
+    <div class="seg small">${[['table', tr('표')], ['cards', tr('카드§view')]].map(([k, l]) => `<button class="${ui.orderView === k ? 'on' : ''}" data-act="order-view" data-v="${k}">${l}</button>`).join('')}</div>
   </div>
-  <p class="hint">상품을 누르면 <b>${MODES[ui.orderMode].label}</b>으로 표시되고, 같은 상태에서 한 번 더 누르면 취소됩니다. 현금만 수금 대상 금액에 들어갑니다.</p>`;
+  <p class="hint">${tr('상품을 누르면 <b>{mode}</b>으로 표시되고, 같은 상태에서 한 번 더 누르면 취소됩니다. 현금만 수금 대상 금액에 들어갑니다.', { mode: tr(MODES[ui.orderMode].label) })}</p>`;
   const actions = `<div class="row-actions">
-    <button class="btn primary" data-act="add-pax">+ 고객 추가</button>
-    <button class="btn" data-act="bulk-pax">명단 붙여넣기</button>
+    <button class="btn primary" data-act="add-pax">${tr('+ 고객 추가')}</button>
+    <button class="btn" data-act="bulk-pax">${tr('명단 붙여넣기')}</button>
   </div>`;
-  if (!c.passengers.length) return modeBar + actions + `<div class="empty"><p>등록된 고객이 없습니다.</p><p class="muted">한 명씩 추가하거나, 엑셀 명단을 복사해 ‘명단 붙여넣기’로 한 번에 넣을 수 있습니다.</p></div>`;
+  if (!c.passengers.length) return modeBar + actions + `<div class="empty"><p>${tr('등록된 고객이 없습니다.')}</p><p class="muted">${tr('한 명씩 추가하거나, 엑셀 명단을 복사해 ‘명단 붙여넣기’로 한 번에 넣을 수 있습니다.')}</p></div>`;
   return modeBar + actions + orderBox(t) + (ui.orderView === 'table' ? ordersTable(t, c) : ordersCards(t, c)) + `
-  <div class="totalbar"><span>현금 판매 합계</span><strong class="fig">${moneyList(c.due, '0')}</strong></div>`;
+  <div class="totalbar"><span>${tr('현금 판매 합계')}</span><strong class="fig">${moneyList(c.due, '0')}</strong></div>`;
+
 }
 
 // 주문서 탭 위쪽: 주문하기(주문 담당자에게 이메일) / 다운로드 / 주문 기록
@@ -297,18 +307,18 @@ function orderBox(t) {
   const canSend = t.status !== 'closed' && (last ? changes.length > 0 : total > 0);
   return `<section class="order-box ${last && changes.length ? 'changed' : ''}">
     <div class="ob-head">
-      <span class="muted">${last ? `${esc(last.version)}차 주문 · ${shortTime(last.created_at)} · ${last.status === 'received' ? '<b class="good-t">관리자 확인</b>' : '확인 대기'}` : '아직 주문하지 않았습니다'}</span>
+      <span class="muted">${last ? `${tr('{v}차 주문', { v: esc(last.version) })} · ${shortTime(last.created_at)} · ${last.status === 'received' ? `<b class="good-t">${tr('관리자 확인')}</b>` : tr('확인 대기')}` : tr('아직 주문하지 않았습니다')}</span>
     </div>
-    ${last && cloud() && !last.emailed_at ? `<p class="ob-warn">${esc(last.version)}차 주문서 이메일이 아직 가지 않았습니다. <button class="btn small" data-act="order-mail">이메일 다시 보내기</button></p>` : ''}
-    ${last && changes.length ? `<p class="ob-warn">주문 후 바뀐 상품 ${changes.length}개: ${changes.slice(0, 4).map((x) => `${esc(x.name)} ${x.before}→${x.after}`).join(', ')}${changes.length > 4 ? ' …' : ''}</p>` : ''}
+    ${last && cloud() && !last.emailed_at ? `<p class="ob-warn">${tr('{v}차 주문서 이메일이 아직 가지 않았습니다.', { v: esc(last.version) })} <button class="btn small" data-act="order-mail">${tr('이메일 다시 보내기')}</button></p>` : ''}
+    ${last && changes.length ? `<p class="ob-warn">${tr('주문 후 바뀐 상품 {n}개:', { n: changes.length })} ${changes.slice(0, 4).map((x) => `${esc(itemName(x))} ${x.before}→${x.after}`).join(', ')}${changes.length > 4 ? ' …' : ''}</p>` : ''}
     <div class="row-actions">
-      <button class="btn" data-act="order-dl">주문서 다운로드</button>
-      <button class="btn primary" data-act="order-send" ${canSend ? '' : 'disabled'}>${last ? '바뀐 내용으로 다시 주문하기' : '주문하기'}</button>
+      <button class="btn" data-act="order-dl">${tr('주문서 다운로드')}</button>
+      <button class="btn primary" data-act="order-send" ${canSend ? '' : 'disabled'}>${last ? tr('바뀐 내용으로 다시 주문하기') : tr('주문하기')}</button>
     </div>
-    ${reqs.length ? `<details class="ob-history"><summary>주문 기록 ${reqs.length}건</summary><ul class="list">${reqs.map((r) => `<li>
-      <div class="li-main"><strong>${esc(r.version)}차</strong> <span class="muted">${shortTime(r.created_at)} · ${esc(r.created_by || '')} · ${r.items.reduce((s, x) => s + x.qty, 0)}건 · ${r.emailed_at ? '메일 보냄 · ' : ''}${r.status === 'received' ? '확인' : '대기'}</span></div>
-      <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
-      ${canReceiveOrders() && r.status !== 'received' ? `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>` : ''}
+    ${reqs.length ? `<details class="ob-history"><summary>${tr('주문 기록 {n}건', { n: reqs.length })}</summary><ul class="list">${reqs.map((r) => `<li>
+      <div class="li-main"><strong>${tr('{v}차', { v: esc(r.version) })}</strong> <span class="muted">${shortTime(r.created_at)} · ${esc(r.created_by || '')} · ${tr('{n}건', { n: r.items.reduce((s, x) => s + x.qty, 0) })} · ${r.emailed_at ? tr('메일 보냄 · ') : ''}${r.status === 'received' ? tr('확인§done') : tr('대기')}</span></div>
+      <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">${tr('엑셀')}</button>
+      ${canReceiveOrders() && r.status !== 'received' ? `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">${tr('확인')}</button>` : ''}
     </li>`).join('')}</ul></details>` : ''}
   </section>`;
 }
@@ -321,17 +331,17 @@ function sheetOrder(t) {
   const gone = [...changes.values()].filter((x) => !snap.items.some((i) => i.product_id === x.product_id));
   const version = (last?.version || 0) + 1;
   openSheet({
-    title: `${version}차 주문하기`,
-    submit: '주문하기',
-    body: `<p class="muted">BDY ${esc(t.bdy)} · 총 ${snap.pax}명. 아래 수량으로 주문서를 만들어 주문 담당자에게 이메일로 보냅니다.${last ? ' 바뀐 상품은 색으로 표시했습니다.' : ''}</p>
-      <table class="sumtable order-preview"><thead><tr><th>상품</th><th>수량</th><th>금액</th>${last ? '<th>이전</th>' : ''}</tr></thead><tbody>
-      ${snap.items.map((x) => { const ch = changes.get(x.product_id); return `<tr class="${ch ? 'chg' : ''}"><th>${esc(x.name)}</th><td class="fig">${x.qty}</td><td class="fig">${money(x.price * x.qty, x.currency)}</td>${last ? `<td class="fig muted">${ch ? ch.before : x.qty}</td>` : ''}</tr>`; }).join('')}
-      ${gone.map((x) => `<tr class="chg"><th>${esc(x.name)}</th><td class="fig">0</td><td></td><td class="fig muted">${x.before}</td></tr>`).join('')}
-      </tbody><tfoot><tr><th>합계</th><td class="fig">${snap.items.reduce((s, x) => s + x.qty, 0)}</td><td class="fig">${moneyList(orderTotals(snap.items), '0')}</td>${last ? '<td></td>' : ''}</tr></tfoot></table>
-      <label class="field"><span>남길 말 (선택)</span><textarea name="note" rows="2" placeholder="예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소"></textarea></label>`,
+    title: tr('{v}차 주문하기', { v: version }),
+    submit: tr('주문하기'),
+    body: `<p class="muted">${tr('BDY {bdy} · 총 {n}명. 아래 수량으로 주문서를 만들어 주문 담당자에게 이메일로 보냅니다.', { bdy: esc(t.bdy), n: snap.pax })}${last ? tr(' 바뀐 상품은 색으로 표시했습니다.') : ''}</p>
+      <table class="sumtable order-preview"><thead><tr><th>${tr('상품§col')}</th><th>${tr('수량')}</th><th>${tr('금액')}</th>${last ? `<th>${tr('이전')}</th>` : ''}</tr></thead><tbody>
+      ${snap.items.map((x) => { const ch = changes.get(x.product_id); return `<tr class="${ch ? 'chg' : ''}"><th>${esc(itemName(x))}</th><td class="fig">${x.qty}</td><td class="fig">${money(x.price * x.qty, x.currency)}</td>${last ? `<td class="fig muted">${ch ? ch.before : x.qty}</td>` : ''}</tr>`; }).join('')}
+      ${gone.map((x) => `<tr class="chg"><th>${esc(itemName(x))}</th><td class="fig">0</td><td></td><td class="fig muted">${x.before}</td></tr>`).join('')}
+      </tbody><tfoot><tr><th>${tr('합계')}</th><td class="fig">${snap.items.reduce((s, x) => s + x.qty, 0)}</td><td class="fig">${moneyList(orderTotals(snap.items), '0')}</td>${last ? '<td></td>' : ''}</tr></tfoot></table>
+      <label class="field"><span>${tr('남길 말 (선택)')}</span><textarea name="note" rows="2" placeholder="${tr('예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소')}"></textarea></label>`,
     onSubmit: async (d) => {
       const req = await store.put('order_requests', { id: uid(), tour_id: t.id, tour_info: { bdy: t.bdy, region: t.region, tour_code: t.tour_code || null, start_date: t.start_date || null, guide: t.guide || null }, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
-      if (!cloud()) return toast(`${version}차 주문을 저장했습니다. 체험 모드라 이메일은 보내지 않습니다.`, 'good');
+      if (!cloud()) return toast(tr('{v}차 주문을 저장했습니다. 체험 모드라 이메일은 보내지 않습니다.', { v: version }), 'good');
       emailOrder(t, req);
     },
   });
@@ -339,26 +349,26 @@ function sheetOrder(t) {
 
 // 주문서 엑셀을 만들어 주문 담당자에게 이메일로 보내기. 실패해도 주문 기록은 남고, 주문서 탭에서 다시 보낼 수 있습니다.
 async function emailOrder(t, req) {
-  toast(`${req.version}차 주문서를 이메일로 보내는 중…`);
+  toast(tr('{v}차 주문서를 이메일로 보내는 중…', { v: req.version }));
   try {
     const { exportOrder } = await import('./excel.js');
     const prev = tourRequests(t.id).find((x) => (x.version || 0) < (req.version || 0));
-    const file = await exportOrder(t, req, prev?.items);
+    const file = await exportOrder(t, { ...req, items: withEn(req.items) }, prev && withEn(prev.items));
     const bytes = new Uint8Array(await file.arrayBuffer());
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     await store.sendOrderEmail({ tour_id: t.id, request_id: req.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty, money(x.price * x.qty, x.currency)]), total: moneyList(orderTotals(req.items), '0') });
     await store.patch('order_requests', req.id, { emailed_at: new Date().toISOString() });
-    toast(`${req.version}차 주문서를 이메일로 보냈습니다.`, 'good');
+    toast(tr('{v}차 주문서를 이메일로 보냈습니다.', { v: req.version }), 'good');
   } catch (err) {
-    toast(`주문은 저장했지만 이메일을 보내지 못했습니다. ${err.message || ''}`, 'bad');
+    toast(tr('주문은 저장했지만 이메일을 보내지 못했습니다. {msg}', { msg: err.message || '' }), 'bad');
   }
 }
 
 async function downloadFile(file) {
   const { saveFile } = await import('./excel.js');
   if (await saveFile(file) === 'retry') {
-    openSheet({ title: '엑셀 파일 준비됨', body: `<p>${esc(file.name)}</p><p class="muted">아래 버튼을 누르면 저장 창이 열립니다.</p>`, submit: '저장하기', onSubmit: () => { saveFile(file); } });
+    openSheet({ title: tr('엑셀 파일 준비됨'), body: `<p>${esc(file.name)}</p><p class="muted">${tr('아래 버튼을 누르면 저장 창이 열립니다.')}</p>`, submit: tr('저장하기'), onSubmit: () => { saveFile(file); } });
   }
 }
 
@@ -373,7 +383,7 @@ function ordersCards(t, c) {
     const sub = {};
     rows.forEach((r) => Object.entries(r.due).forEach(([k, v]) => { sub[k] = round2((sub[k] || 0) + v); }));
     return `<section class="grp">
-      <h3><span>${g ? 'Group ' + esc(g) : '그룹 없음'}</span><small>${rows.length}명 · ${moneyList(sub, '0')}</small></h3>
+      <h3><span>${g ? 'Group ' + esc(g) : tr('그룹 없음')}</span><small>${tr('{n}명', { n: rows.length })} · ${moneyList(sub, '0')}</small></h3>
       ${rows.map((r) => paxCard(t, c, r)).join('')}
     </section>`;
   }).join('');
@@ -387,39 +397,40 @@ function paxCard(t, c, r) {
     <header>
       <button class="pax-name" data-act="edit-pax" data-id="${esc(r.p.id)}"><strong>${esc(r.p.name_kor || r.p.name_eng)}</strong><span>${esc(r.p.name_eng)} ${esc(r.p.gender || '')}</span></button>
       <div class="pax-money">
-        ${hasDue ? `<span class="fig">${moneyList(r.due)}</span>` : '<span class="muted">현금 주문 없음</span>'}
-        ${owes ? `<button class="due-btn" data-act="pay" data-pax="${esc(r.p.id)}">미수 ${moneyList(Object.fromEntries(Object.entries(bal).filter(([, v]) => v > 0)))} · 수금</button>`
-          : hasDue ? '<span class="paid-ok">완납</span>' : ''}
+        ${hasDue ? `<span class="fig">${moneyList(r.due)}</span>` : `<span class="muted">${tr('현금 주문 없음')}</span>`}
+        ${owes ? `<button class="due-btn" data-act="pay" data-pax="${esc(r.p.id)}">${tr('미수 {amt} · 수금', { amt: moneyList(Object.fromEntries(Object.entries(bal).filter(([, v]) => v > 0))) })}</button>`
+          : hasDue ? `<span class="paid-ok">${tr('완납')}</span>` : ''}
       </div>
     </header>
     ${r.p.note ? `<p class="pax-note">${esc(r.p.note)}</p>` : ''}
     <div class="chips">${c.products.filter((pr) => !ui.onlySel || expanded.has(r.p.id) || r.orders.has(pr.id)).map((pr) => {
       const o = r.orders.get(pr.id);
       return `<button class="chip ${o ? 'm-' + o.mode : ''}" data-act="tap-order" data-pax="${esc(r.p.id)}" data-prd="${esc(pr.id)}" aria-pressed="${!!o}">
-        ${o ? `<i>${MODES[o.mode].label}</i>` : ''}${esc(pr.name)} <small>${money(o ? o.price : priceFor(t, pr), o ? o.currency : pr.currency)}</small></button>`;
-    }).join('')}${ui.onlySel && !expanded.has(r.p.id) ? `<button class="chip more" data-act="expand" data-id="${esc(r.p.id)}">+ 상품 선택</button>` : ''}</div>
+        ${o ? `<i>${tr(MODES[o.mode].label)}</i>` : ''}${esc(pname(pr))} <small>${money(o ? o.price : priceFor(t, pr), o ? o.currency : pr.currency)}</small></button>`;
+    }).join('')}${ui.onlySel && !expanded.has(r.p.id) ? `<button class="chip more" data-act="expand" data-id="${esc(r.p.id)}">${tr('+ 상품 선택')}</button>` : ''}</div>
   </article>`;
 }
 
 function ordersTable(t, c) {
   return `<div class="scroll-x"><table class="matrix">
-    <thead><tr><th class="stick">고객</th>${c.products.map((pr) => `<th><span>${esc(pr.name)}</span><small>${money(priceFor(t, pr), pr.currency)}</small></th>`).join('')}<th>개인별 합계</th><th>미수</th></tr></thead>
+    <thead><tr><th class="stick">${tr('고객')}</th>${c.products.map((pr) => `<th><span>${esc(pname(pr))}</span><small>${money(priceFor(t, pr), pr.currency)}</small></th>`).join('')}<th>${tr('개인별 합계')}</th><th>${tr('미수')}</th></tr></thead>
     <tbody>${c.passengers.map((r) => `<tr>
       <th class="stick"><button class="pax-name" data-act="edit-pax" data-id="${esc(r.p.id)}"><strong>${esc(r.p.name_kor || r.p.name_eng)}</strong><span>G${esc(r.p.group_no || '-')}</span></button></th>
       ${c.products.map((pr) => {
         const o = r.orders.get(pr.id);
-        return `<td><button class="cell ${o ? 'm-' + o.mode : ''}" data-act="tap-order" data-pax="${esc(r.p.id)}" data-prd="${esc(pr.id)}" aria-label="${esc(pr.name)} ${o ? MODES[o.mode].label : '미선택'}">${o ? MODES[o.mode].mark : ''}</button></td>`;
+        return `<td><button class="cell ${o ? 'm-' + o.mode : ''}" data-act="tap-order" data-pax="${esc(r.p.id)}" data-prd="${esc(pr.id)}" aria-label="${esc(pname(pr))} ${o ? tr(MODES[o.mode].label) : tr('미선택')}">${o ? MODES[o.mode].mark : ''}</button></td>`;
       }).join('')}
       <td class="fig">${moneyList(r.due)}</td>
       <td>${Object.values(r.balance).some((v) => v > 0) ? `<button class="due-btn" data-act="pay" data-pax="${esc(r.p.id)}">${moneyList(Object.fromEntries(Object.entries(r.balance).filter(([, v]) => v > 0)))}</button>` : ''}</td>
     </tr>`).join('')}</tbody>
     <tfoot>
-      <tr><th class="stick">현금 인원</th>${c.productRows.map((x) => `<td>${x.charged || ''}</td>`).join('')}<td></td><td></td></tr>
-      <tr><th class="stick">신청 인원</th>${c.productRows.map((x) => `<td>${x.applied || ''}</td>`).join('')}<td></td><td></td></tr>
-      <tr><th class="stick">금액</th>${c.productRows.map((x) => `<td class="fig">${x.amount ? money(x.amount, x.product.currency) : ''}</td>`).join('')}<td class="fig">${moneyList(c.due)}</td><td></td></tr>
+      <tr><th class="stick">${tr('현금 인원')}</th>${c.productRows.map((x) => `<td>${x.charged || ''}</td>`).join('')}<td></td><td></td></tr>
+      <tr><th class="stick">${tr('신청 인원')}</th>${c.productRows.map((x) => `<td>${x.applied || ''}</td>`).join('')}<td></td><td></td></tr>
+      <tr><th class="stick">${tr('금액')}</th>${c.productRows.map((x) => `<td class="fig">${x.amount ? money(x.amount, x.product.currency) : ''}</td>`).join('')}<td class="fig">${moneyList(c.due)}</td><td></td></tr>
     </tfoot>
   </table></div>
-  <p class="hint">● 현금 · P 선결제 · H 홈쇼핑 · C 보상</p>`;
+  <p class="hint">${tr('● 현금 · P 선결제 · H 홈쇼핑 · C 보상')}</p>`;
+
 }
 
 function tabCash(t, c) {
@@ -432,39 +443,39 @@ function tabCash(t, c) {
   <table class="sumtable">
     <thead><tr><th></th>${curs.map((k) => `<th>${k}</th>`).join('')}</tr></thead>
     <tbody>
-      <tr><th>판매 (현금)</th>${curs.map((k) => `<td class="fig">${money(c.due[k] || 0, k)}</td>`).join('')}</tr>
-      <tr><th>수금</th>${curs.map((k) => `<td class="fig good-t">${money(c.paid[k] || 0, k)}</td>`).join('')}</tr>
-      <tr class="em"><th>남은 금액</th>${curs.map((k) => { const v = round2((c.due[k] || 0) - (c.paid[k] || 0)); return `<td class="fig ${v > 0 ? 'warn-t' : v < 0 ? 'bad-t' : ''}">${money(v, k)}</td>`; }).join('')}</tr>
+      <tr><th>${tr('판매 (현금)')}</th>${curs.map((k) => `<td class="fig">${money(c.due[k] || 0, k)}</td>`).join('')}</tr>
+      <tr><th>${tr('수금')}</th>${curs.map((k) => `<td class="fig good-t">${money(c.paid[k] || 0, k)}</td>`).join('')}</tr>
+      <tr class="em"><th>${tr('남은 금액')}</th>${curs.map((k) => { const v = round2((c.due[k] || 0) - (c.paid[k] || 0)); return `<td class="fig ${v > 0 ? 'warn-t' : v < 0 ? 'bad-t' : ''}">${money(v, k)}</td>`; }).join('')}</tr>
     </tbody>
   </table>
-  <div class="row-actions"><button class="btn primary" data-act="pay">+ 수금 기록</button></div>
-  <h3 class="sec">미수 고객 <small>${owing.length}명</small></h3>
+  <div class="row-actions"><button class="btn primary" data-act="pay">${tr('+ 수금 기록')}</button></div>
+  <h3 class="sec">${tr('미수 고객')} <small>${tr('{n}명', { n: owing.length })}</small></h3>
   <ul class="list">${owing.length ? owing.map((r) => `<li>
       <div><strong>${esc(r.p.name_kor || r.p.name_eng)}</strong> <span class="muted">G${esc(r.p.group_no || '-')}</span></div>
-      <button class="due-btn" data-act="pay" data-pax="${esc(r.p.id)}">${moneyList(Object.fromEntries(Object.entries(r.balance).filter(([, v]) => v > 0)))} 수금</button>
-    </li>`).join('') : '<li class="muted">미수 고객이 없습니다.</li>'}</ul>
-  <h3 class="sec">수금 내역 <small>${pays.length}건</small></h3>
+      <button class="due-btn" data-act="pay" data-pax="${esc(r.p.id)}">${tr('{amt} 수금', { amt: moneyList(Object.fromEntries(Object.entries(r.balance).filter(([, v]) => v > 0))) })}</button>
+    </li>`).join('') : `<li class="muted">${tr('미수 고객이 없습니다.')}</li>`}</ul>
+  <h3 class="sec">${tr('수금 내역')} <small>${tr('{n}건', { n: pays.length })}</small></h3>
   <ul class="list">${pays.length ? pays.map((p) => `<li>
-      <div class="li-main"><strong>${esc(pax.get(p.passenger_id)?.name_kor || '공통')}</strong>
-        <span class="muted">${PAY_METHODS[p.method] || esc(p.method)}${p.note ? ' · ' + esc(p.note) : ''}</span>
-        <span class="feed-meta">${esc(p.created_by || '')} · ${new Date(p.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
+      <div class="li-main"><strong>${esc(pax.get(p.passenger_id)?.name_kor || tr('공통'))}</strong>
+        <span class="muted">${PAY_METHODS[p.method] ? tr(PAY_METHODS[p.method]) : esc(p.method)}${p.note ? ' · ' + esc(p.note) : ''}</span>
+        <span class="feed-meta">${esc(p.created_by || '')} · ${new Date(p.created_at).toLocaleString(locale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
       <span class="fig good-t">+${money(p.amount, p.currency)}</span>
-      <button class="icon-btn" data-act="del-pay" data-id="${esc(p.id)}" aria-label="수금 기록 삭제">×</button>
-    </li>`).join('') : '<li class="muted">아직 수금 기록이 없습니다.</li>'}</ul>`;
+      <button class="icon-btn" data-act="del-pay" data-id="${esc(p.id)}" aria-label="${tr('수금 기록 삭제')}">×</button>
+    </li>`).join('') : `<li class="muted">${tr('아직 수금 기록이 없습니다.')}</li>`}</ul>`;
 }
 
 function tabExpenses(t, c) {
   const list = [...c.expenses].sort((a, b) => b.created_at.localeCompare(a.created_at));
   return `
-  <div class="kpis"><div class="kpi"><span class="label">지출 + 계좌이체 합계 (C)</span><strong class="fig">${moneyList(c.spent, '0')}</strong></div></div>
-  <div class="row-actions"><button class="btn primary" data-act="add-exp">+ 지출 기록</button></div>
+  <div class="kpis"><div class="kpi"><span class="label">${tr('지출 + 계좌이체 합계 (C)')}</span><strong class="fig">${moneyList(c.spent, '0')}</strong></div></div>
+  <div class="row-actions"><button class="btn primary" data-act="add-exp">${tr('+ 지출 기록')}</button></div>
   <ul class="list">${list.length ? list.map((e) => `<li>
-      <div class="li-main"><strong>${esc(e.category)}</strong> <span class="tag ${e.kind === 'transfer' ? 'tr' : 'exp'}">${e.kind === 'transfer' ? '계좌이체·환전' : esc(e.place)}</span>
+      <div class="li-main"><strong>${esc(valLabel(e.category))}</strong> <span class="tag ${e.kind === 'transfer' ? 'tr' : 'exp'}">${e.kind === 'transfer' ? tr('계좌이체·환전') : esc(valLabel(e.place))}</span>
         ${e.note ? `<span class="muted">${esc(e.note)}</span>` : ''}
-        <span class="feed-meta">${esc(e.created_by || '')} · ${new Date(e.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
+        <span class="feed-meta">${esc(e.created_by || '')} · ${new Date(e.created_at).toLocaleString(locale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
       <span class="fig">−${money(e.amount, e.currency)}</span>
-      <button class="icon-btn" data-act="del-exp" data-id="${esc(e.id)}" aria-label="지출 기록 삭제">×</button>
-    </li>`).join('') : '<li class="muted">지출 기록이 없습니다. 팁, 커미션, 가이드 대납, 크루즈팁 등을 쓰는 즉시 기록하세요.</li>'}</ul>`;
+      <button class="icon-btn" data-act="del-exp" data-id="${esc(e.id)}" aria-label="${tr('지출 기록 삭제')}">×</button>
+    </li>`).join('') : `<li class="muted">${tr('지출 기록이 없습니다. 팁, 커미션, 가이드 대납, 크루즈팁 등을 쓰는 즉시 기록하세요.')}</li>`}</ul>`;
 }
 
 function tabSettle(t, c) {
@@ -475,40 +486,40 @@ function tabSettle(t, c) {
     const counts = t.cash_on_hand?.[cur] || {};
     return `<div class="denoms"><h4>${cur} <span class="fig">${money(cashOnHand(t, cur), cur)}</span></h4>
       <div class="dgrid">${(DENOMS[cur] || []).map((d) => `<label><span>${d.toLocaleString()}</span><input type="number" inputmode="numeric" min="0" ${ro} id="cnt-${cur}-${d}" data-cnt="${cur}" data-den="${d}" value="${esc(counts[d] || '')}" placeholder="0"></label>`).join('')}
-        <label class="other"><span>동전·기타 금액</span><input type="number" inputmode="decimal" ${ro} id="cnt-${cur}-other" data-cnt="${cur}" data-den="other" value="${esc(counts.other || '')}" placeholder="0"></label></div></div>`;
+        <label class="other"><span>${tr('동전·기타 금액')}</span><input type="number" inputmode="decimal" ${ro} id="cnt-${cur}-other" data-cnt="${cur}" data-den="other" value="${esc(counts.other || '')}" placeholder="0"></label></div></div>`;
   };
-  const checks = [['finance_check', '재무팀 확인'], ['md_check', '대표 확인']];
+  const checks = [['finance_check', tr('재무팀 확인')], ['md_check', tr('대표 확인')]];
   return `
   <div class="scroll-x"><table class="sumtable settle">
     <thead><tr><th></th>${c.settlement.map((r) => `<th>${r.currency}</th>`).join('')}</tr></thead>
     <tbody>
-      <tr><th>A 회사에서 받은 돈</th>${c.settlement.map((r) => `<td><input class="fig" type="number" inputmode="decimal" ${ro} id="recv-${r.currency}" data-recv="${r.currency}" value="${esc(r.A || '')}" placeholder="0"></td>`).join('')}</tr>
-      <tr><th>B 판매 (현금 주문)</th>${c.settlement.map((r) => `<td class="fig">${money(r.B, r.currency)}</td>`).join('')}</tr>
-      <tr><th>C 지출·계좌이체</th>${c.settlement.map((r) => `<td class="fig">−${money(r.C, r.currency)}</td>`).join('')}</tr>
-      <tr><th>D 카드·계좌이체 수금 <small>현금이 아니라 손에 없는 돈</small></th>${c.settlement.map((r) => `<td class="fig">−${money(r.D, r.currency)}</td>`).join('')}</tr>
-      <tr class="em"><th>F 있어야 할 돈 <small>A+B−C−D</small></th>${c.settlement.map((r) => `<td class="fig">${money(r.F, r.currency)}</td>`).join('')}</tr>
-      <tr><th>E 보유 현금 <small>아래에서 세기</small></th>${c.settlement.map((r) => `<td class="fig">${money(r.E, r.currency)}</td>`).join('')}</tr>
-      <tr class="em"><th>편차 <small>E−F</small></th>${c.settlement.map((r) => `<td class="fig diff ${r.diff === 0 ? 'zero' : r.diff < 0 ? 'neg' : 'pos'}">${r.diff > 0 ? '+' : ''}${money(r.diff, r.currency)}</td>`).join('')}</tr>
-      <tr><th class="muted">참고: 실제 수금 기록</th>${c.settlement.map((r) => `<td class="fig muted">${money(r.collected, r.currency)}</td>`).join('')}</tr>
+      <tr><th>${tr('A 회사에서 받은 돈')}</th>${c.settlement.map((r) => `<td><input class="fig" type="number" inputmode="decimal" ${ro} id="recv-${r.currency}" data-recv="${r.currency}" value="${esc(r.A || '')}" placeholder="0"></td>`).join('')}</tr>
+      <tr><th>${tr('B 판매 (현금 주문)')}</th>${c.settlement.map((r) => `<td class="fig">${money(r.B, r.currency)}</td>`).join('')}</tr>
+      <tr><th>${tr('C 지출·계좌이체')}</th>${c.settlement.map((r) => `<td class="fig">−${money(r.C, r.currency)}</td>`).join('')}</tr>
+      <tr><th>${tr('D 카드·계좌이체 수금')} <small>${tr('현금이 아니라 손에 없는 돈')}</small></th>${c.settlement.map((r) => `<td class="fig">−${money(r.D, r.currency)}</td>`).join('')}</tr>
+      <tr class="em"><th>${tr('F 있어야 할 돈')} <small>A+B−C−D</small></th>${c.settlement.map((r) => `<td class="fig">${money(r.F, r.currency)}</td>`).join('')}</tr>
+      <tr><th>${tr('E 보유 현금')} <small>${tr('아래에서 세기')}</small></th>${c.settlement.map((r) => `<td class="fig">${money(r.E, r.currency)}</td>`).join('')}</tr>
+      <tr class="em"><th>${tr('편차')} <small>E−F</small></th>${c.settlement.map((r) => `<td class="fig diff ${r.diff === 0 ? 'zero' : r.diff < 0 ? 'neg' : 'pos'}">${r.diff > 0 ? '+' : ''}${money(r.diff, r.currency)}</td>`).join('')}</tr>
+      <tr><th class="muted">${tr('참고: 실제 수금 기록')}</th>${c.settlement.map((r) => `<td class="fig muted">${money(r.collected, r.currency)}</td>`).join('')}</tr>
     </tbody>
   </table></div>
-  <p class="hint">편차가 0이면 정산이 맞습니다. 마이너스는 돈이 부족하고, 플러스는 남는다는 뜻입니다. 아직 받지 못한 미수금이 있으면 그만큼 마이너스로 나옵니다.</p>
-  <h3 class="sec">보유 현금 세기 (E)</h3>
+  <p class="hint">${tr('편차가 0이면 정산이 맞습니다. 마이너스는 돈이 부족하고, 플러스는 남는다는 뜻입니다. 아직 받지 못한 미수금이 있으면 그만큼 마이너스로 나옵니다.')}</p>
+  <h3 class="sec">${tr('보유 현금 세기 (E)')}</h3>
   ${curs.map(denomGrid).join('')}
-  <label class="field inline"><span>다른 통화 추가</span><select id="extra-cur" data-extra-cur>
-    <option value="">선택</option>${CURRENCIES.filter((k) => !curs.includes(k)).map((k) => `<option>${k}</option>`).join('')}</select></label>
-  <h3 class="sec">비고</h3>
-  <textarea id="tour-notes" data-notes rows="3" ${ro} placeholder="예: 360 비는 돈, 20유로 추가 납부 필요">${esc(t.notes || '')}</textarea>
-  <h3 class="sec">확인</h3>
+  <label class="field inline"><span>${tr('다른 통화 추가')}</span><select id="extra-cur" data-extra-cur>
+    <option value="">${tr('선택')}</option>${CURRENCIES.filter((k) => !curs.includes(k)).map((k) => `<option>${k}</option>`).join('')}</select></label>
+  <h3 class="sec">${tr('비고')}</h3>
+  <textarea id="tour-notes" data-notes rows="3" ${ro} placeholder="${tr('예: 360 비는 돈, 20유로 추가 납부 필요')}">${esc(t.notes || '')}</textarea>
+  <h3 class="sec">${tr('확인§check')}</h3>
   <div class="checks">${checks.map(([k, l]) => `<div class="check ${t[k] ? 'done' : ''}">
       <span>${l}</span>
-      ${t[k] ? `<strong>${esc(t[k].name)}</strong><small>${new Date(t[k].at).toLocaleString('ko-KR')}</small>` : '<small>대기</small>'}
-      ${isAdmin() ? `<button class="btn small" data-act="check" data-k="${k}">${t[k] ? '취소' : '확인'}</button>` : ''}
+      ${t[k] ? `<strong>${esc(t[k].name)}</strong><small>${new Date(t[k].at).toLocaleString(locale())}</small>` : `<small>${tr('대기')}</small>`}
+      ${isAdmin() ? `<button class="btn small" data-act="check" data-k="${k}">${t[k] ? tr('취소§undo') : tr('확인')}</button>` : ''}
     </div>`).join('')}</div>
   <div class="row-actions">
-    ${t.status === 'open' ? `<button class="btn primary" data-act="status" data-to="submitted">정산 제출</button>` : ''}
-    ${t.status === 'submitted' && isAdmin() ? `<button class="btn primary" data-act="status" data-to="closed">정산 완료</button>` : ''}
-    ${t.status !== 'open' && (isAdmin() || t.status === 'submitted') ? `<button class="btn" data-act="status" data-to="open">다시 열기</button>` : ''}
+    ${t.status === 'open' ? `<button class="btn primary" data-act="status" data-to="submitted">${tr('정산 제출§btn')}</button>` : ''}
+    ${t.status === 'submitted' && isAdmin() ? `<button class="btn primary" data-act="status" data-to="closed">${tr('정산 완료§btn')}</button>` : ''}
+    ${t.status !== 'open' && (isAdmin() || t.status === 'submitted') ? `<button class="btn" data-act="status" data-to="open">${tr('다시 열기')}</button>` : ''}
   </div>`;
 }
 
@@ -516,21 +527,22 @@ function tabSummary(t, c) {
   const modeCols = Object.entries(MODES).filter(([k]) => k !== 'cash');
   return `
   <div class="scroll-x"><table class="sumtable">
-    <thead><tr><th>상품</th><th>단가</th><th>신청</th><th>현금</th>${modeCols.map(([, m]) => `<th>${m.label}</th>`).join('')}<th>금액</th></tr></thead>
+    <thead><tr><th>${tr('상품§col')}</th><th>${tr('단가')}</th><th>${tr('신청')}</th><th>${tr('현금')}</th>${modeCols.map(([, m]) => `<th>${tr(m.label)}</th>`).join('')}<th>${tr('금액')}</th></tr></thead>
     <tbody>${c.productRows.filter((r) => r.applied).map((r) => `<tr>
-      <th>${esc(r.product.name)}${r.product.units > 1 ? ' <small>(×2)</small>' : ''}</th>
+      <th>${esc(pname(r.product))}${r.product.units > 1 ? ' <small>(×2)</small>' : ''}</th>
       <td class="fig">${money(r.product.price, r.product.currency)}</td>
       <td class="fig">${r.applied}</td><td class="fig">${r.charged}</td>
       ${modeCols.map(([k]) => `<td class="fig">${r.modes[k] || ''}</td>`).join('')}
-      <td class="fig">${money(r.amount, r.product.currency)}</td></tr>`).join('') || `<tr><td colspan="${5 + modeCols.length}" class="muted">선택된 상품이 없습니다.</td></tr>`}</tbody>
-    <tfoot><tr><th>합계</th><td></td><td class="fig">${c.productRows.reduce((s, r) => s + r.applied, 0)}</td><td class="fig">${c.productRows.reduce((s, r) => s + r.charged, 0)}</td>${modeCols.map(() => '<td></td>').join('')}<td class="fig">${moneyList(c.due, '0')}</td></tr>
-      <tr><th>총 옵션 수</th><td colspan="${4 + modeCols.length}" class="fig">${c.productRows.reduce((s, r) => s + r.tickets, 0)}개 (결합상품은 2개로 계산)</td></tr></tfoot>
+      <td class="fig">${money(r.amount, r.product.currency)}</td></tr>`).join('') || `<tr><td colspan="${5 + modeCols.length}" class="muted">${tr('선택된 상품이 없습니다.')}</td></tr>`}</tbody>
+    <tfoot><tr><th>${tr('합계')}</th><td></td><td class="fig">${c.productRows.reduce((s, r) => s + r.applied, 0)}</td><td class="fig">${c.productRows.reduce((s, r) => s + r.charged, 0)}</td>${modeCols.map(() => '<td></td>').join('')}<td class="fig">${moneyList(c.due, '0')}</td></tr>
+      <tr><th>${tr('총 옵션 수')}</th><td colspan="${4 + modeCols.length}" class="fig">${tr('{n}개 (결합상품은 2개로 계산)', { n: c.productRows.reduce((s, r) => s + r.tickets, 0) })}</td></tr></tfoot>
   </table></div>
   <div class="row-actions">
-    <button class="btn primary" data-act="export">엑셀로 내려받기</button>
-    <button class="btn" data-act="edit-tour" data-id="${esc(t.id)}">투어 정보 수정</button>
+    <button class="btn primary" data-act="export">${tr('엑셀로 내려받기')}</button>
+    <button class="btn" data-act="edit-tour" data-id="${esc(t.id)}">${tr('투어 정보 수정')}</button>
   </div>
-  <p class="hint">엑셀 파일에는 CC(주문서), 정산서, 수금 내역, 지출 내역 시트가 들어갑니다.</p>`;
+  <p class="hint">${tr('엑셀 파일에는 CC(주문서), 정산서, 수금 내역, 지출 내역 시트가 들어갑니다.')}</p>`;
+
 }
 
 /* ---------- 상품 ---------- */
@@ -538,16 +550,16 @@ function tabSummary(t, c) {
 function viewProducts() {
   const list = store.all('products').filter((p) => p.region === ui.productRegion).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   return `
-  <div class="row-head"><h2>상품·가격</h2>${isAdmin() ? '<button class="btn primary" data-act="add-prd">+ 상품 추가</button>' : ''}</div>
-  <div class="seg">${Object.entries(REGIONS).map(([k, r]) => `<button class="${ui.productRegion === k ? 'on' : ''}" data-act="prd-region" data-r="${k}">${r.label}</button>`).join('')}</div>
-  <p class="hint">가격을 바꿔도 이미 입력된 주문의 가격은 그대로 유지됩니다.${isAdmin() ? '' : ' 상품 수정은 관리자만 할 수 있습니다.'}</p>
+  <div class="row-head"><h2>${tr('상품·가격')}</h2>${isAdmin() ? `<button class="btn primary" data-act="add-prd">${tr('+ 상품 추가')}</button>` : ''}</div>
+  <div class="seg">${Object.entries(REGIONS).map(([k, r]) => `<button class="${ui.productRegion === k ? 'on' : ''}" data-act="prd-region" data-r="${k}">${tr(r.label)}</button>`).join('')}</div>
+  <p class="hint">${tr('가격을 바꿔도 이미 입력된 주문의 가격은 그대로 유지됩니다.')}${isAdmin() ? '' : tr(' 상품 수정은 관리자만 할 수 있습니다.')}</p>
   <ul class="list products">${list.map((p) => `<li class="${p.active === false ? 'off' : ''}">
     <button class="li-main as-btn" data-act="edit-prd" data-id="${esc(p.id)}" ${isAdmin() ? '' : 'disabled'}>
-      <strong>${esc(p.name)}</strong>
-      <span class="muted">${p.rates?.length ? '투어별 요금 ' + p.rates.join(' / ') + ' · ' : ''}${p.units > 1 ? '결합상품 (2개로 계산) · ' : ''}${p.active === false ? '숨김' : '판매중'}</span>
+      <strong>${esc(pname(p))}</strong>
+      <span class="muted">${p.rates?.length ? tr('투어별 요금 {rates}', { rates: p.rates.join(' / ') }) + ' · ' : ''}${p.units > 1 ? tr('결합상품 (2개로 계산) · ') : ''}${p.active === false ? tr('숨김') : tr('판매중')}</span>
     </button>
     <span class="fig">${money(p.price, p.currency)}</span>
-  </li>`).join('') || '<li class="muted">등록된 상품이 없습니다.</li>'}</ul>`;
+  </li>`).join('') || `<li class="muted">${tr('등록된 상품이 없습니다.')}</li>`}</ul>`;
 }
 
 /* ---------- 설정 ---------- */
@@ -555,61 +567,74 @@ function viewProducts() {
 function viewSettings() {
   const local = store.status.mode === 'local';
   return `
-  <h2>설정</h2>
+  <h2>${tr('설정')}</h2>
   <section class="card">
-    <h3>내 정보</h3>
-    <p><strong>${esc(me())}</strong> <span class="pill">${isAdmin() ? '관리자' : '직원'}</span></p>
-    ${local ? '<button class="btn" data-act="set-name">이름 바꾸기</button>' : `<p class="muted">${esc(store.user.email || '')}</p><div class="row-actions"><button class="btn" data-act="change-pw">비밀번호 바꾸기</button><button class="btn" data-act="sign-out">로그아웃</button></div>`}
+    <h3>${tr('내 정보')}</h3>
+    <p><strong>${esc(me())}</strong> <span class="pill">${isAdmin() ? tr('관리자') : tr('직원')}</span></p>
+    ${local ? `<button class="btn" data-act="set-name">${tr('이름 바꾸기')}</button>` : `<p class="muted">${esc(store.user.email || '')}</p><div class="row-actions"><button class="btn" data-act="change-pw">${tr('비밀번호 바꾸기')}</button><button class="btn" data-act="sign-out">${tr('로그아웃')}</button></div>`}
   </section>
   <section class="card">
-    <h3>휴대폰에 설치</h3>
-    ${installEvent ? '<button class="btn primary" data-act="install">앱으로 설치</button>' : ''}
-    <p><b>아이폰</b>: Safari로 열고 공유 버튼 → ‘홈 화면에 추가’.</p>
-    <p><b>안드로이드</b>: Chrome으로 열고 메뉴(⋮) → ‘앱 설치’ 또는 ‘홈 화면에 추가’.</p>
-    <p class="muted">설치하면 앱처럼 전체 화면으로 열리고, 인터넷이 잠시 끊겨도 입력한 내용은 기기에 보관했다가 연결되면 전송됩니다.</p>
+    <h3>${tr('언어')}</h3>
+    <div class="seg">${langButtons()}</div>
   </section>
   <section class="card">
-    <h3>데이터 연결</h3>
-    ${local ? `<p>지금은 <b>체험 모드</b>입니다. 데이터가 이 기기의 브라우저에만 저장되어 다른 직원과 공유되지 않습니다.</p>
-      <p class="muted">Supabase(무료) 프로젝트를 연결하면 모든 직원 휴대폰이 같은 데이터를 실시간으로 봅니다. 설정 방법은 README에 있습니다.</p>
-      <div class="row-actions"><button class="btn" data-act="reset-local" data-sample="1">예시 데이터로 되돌리기</button><button class="btn danger" data-act="reset-local" data-sample="0">모두 지우고 빈 상태로</button></div>`
-      : `<p>Supabase 서버에 연결되어 있습니다. 상태: <b>${esc($('#conn').textContent)}</b></p>${store.status.pending ? `<p class="warn-t">아직 서버로 보내지 못한 변경 ${store.status.pending}건이 이 기기에 보관되어 있습니다.</p>` : ''}`}
+    <h3>${tr('휴대폰에 설치')}</h3>
+    ${installEvent ? `<button class="btn primary" data-act="install">${tr('앱으로 설치')}</button>` : ''}
+    <p>${tr('<b>아이폰</b>: Safari로 열고 공유 버튼 → ‘홈 화면에 추가’.')}</p>
+    <p>${tr('<b>안드로이드</b>: Chrome으로 열고 메뉴(⋮) → ‘앱 설치’ 또는 ‘홈 화면에 추가’.')}</p>
+    <p class="muted">${tr('설치하면 앱처럼 전체 화면으로 열리고, 인터넷이 잠시 끊겨도 입력한 내용은 기기에 보관했다가 연결되면 전송됩니다.')}</p>
+  </section>
+  <section class="card">
+    <h3>${tr('데이터 연결')}</h3>
+    ${local ? `<p>${tr('지금은 <b>체험 모드</b>입니다. 데이터가 이 기기의 브라우저에만 저장되어 다른 직원과 공유되지 않습니다.')}</p>
+      <p class="muted">${tr('Supabase(무료) 프로젝트를 연결하면 모든 직원 휴대폰이 같은 데이터를 실시간으로 봅니다. 설정 방법은 README에 있습니다.')}</p>
+      <div class="row-actions"><button class="btn" data-act="reset-local" data-sample="1">${tr('예시 데이터로 되돌리기')}</button><button class="btn danger" data-act="reset-local" data-sample="0">${tr('모두 지우고 빈 상태로')}</button></div>`
+      : `<p>${tr('Supabase 서버에 연결되어 있습니다. 상태:')} <b>${esc($('#conn').textContent)}</b></p>${store.status.pending ? `<p class="warn-t">${tr('아직 서버로 보내지 못한 변경 {n}건이 이 기기에 보관되어 있습니다.', { n: store.status.pending })}</p>` : ''}`}
   </section>`;
 }
 
 function sheetPassword() {
   openSheet({
-    title: '비밀번호 바꾸기', submit: '바꾸기',
-    body: `<label class="field"><span>현재 비밀번호</span><input name="cur" type="password" autocomplete="current-password" required></label>
-      <label class="field"><span>새 비밀번호 (8자 이상)</span><input name="next" type="password" autocomplete="new-password" minlength="8" required></label>
-      <label class="field"><span>새 비밀번호 확인</span><input name="next2" type="password" autocomplete="new-password" required></label>
-      <p class="muted">비밀번호를 잊으면 관리자에게 다시 정해 달라고 요청하세요.</p>`,
+    title: tr('비밀번호 바꾸기'), submit: tr('바꾸기'),
+    body: `<label class="field"><span>${tr('현재 비밀번호')}</span><input name="cur" type="password" autocomplete="current-password" required></label>
+      <label class="field"><span>${tr('새 비밀번호 (8자 이상)')}</span><input name="next" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="field"><span>${tr('새 비밀번호 확인')}</span><input name="next2" type="password" autocomplete="new-password" required></label>
+      <p class="muted">${tr('비밀번호를 잊으면 관리자에게 다시 정해 달라고 요청하세요.')}</p>`,
     onSubmit: async (d) => {
-      if (!d.cur || !d.next) throw new Error('비밀번호를 입력하세요.');
-      if (d.next.length < 8) throw new Error('새 비밀번호는 8자 이상이어야 합니다.');
-      if (d.next !== d.next2) throw new Error('새 비밀번호 두 칸이 서로 다릅니다.');
-      if (d.next === DEFAULT_PW) throw new Error('기본 비밀번호와 다른 비밀번호를 입력하세요.');
+      if (!d.cur || !d.next) throw new Error(tr('비밀번호를 입력하세요.'));
+      if (d.next.length < 8) throw new Error(tr('새 비밀번호는 8자 이상이어야 합니다.'));
+      if (d.next !== d.next2) throw new Error(tr('새 비밀번호 두 칸이 서로 다릅니다.'));
+      if (d.next === DEFAULT_PW) throw new Error(tr('기본 비밀번호와 다른 비밀번호를 입력하세요.'));
       await store.changePassword(d.cur, d.next);
-      toast('비밀번호를 바꿨습니다.', 'good');
+      toast(tr('비밀번호를 바꿨습니다.'), 'good');
       scheduleRender();
     },
   });
 }
 
+let loginShown = false;
 function renderLogin() {
+  // 언어를 바꿔 다시 그릴 때 입력한 이메일·비밀번호는 그대로 둠
+  const prev = loginShown ? { email: $('#login-email')?.value || '', pw: $('#login-pw')?.value || '', err: $('#login-err')?.hidden === false } : null;
+  loginShown = true;
   $('#conn').className = 'conn';
-  $('#conn').textContent = '로그인 필요';
+  $('#conn').textContent = tr('로그인 필요');
   document.body.classList.add('login');
   $('#view').innerHTML = `
   <form class="card login-card" id="login-form">
     <img class="login-logo" src="icons/logo.svg" alt="Badaya Field">
-    <h2>로그인</h2>
-    <p class="muted">회사에서 받은 이메일과 비밀번호로 로그인하세요.</p>
-    <label class="field"><span>이메일</span><input id="login-email" name="email" type="email" autocomplete="username" required></label>
-    <label class="field"><span>비밀번호</span><input id="login-pw" name="password" type="password" autocomplete="current-password" required></label>
-    <button class="btn primary wide" type="submit">로그인</button>
+    <h2>${tr('로그인')}</h2>
+    <p class="muted">${tr('회사에서 받은 이메일과 비밀번호로 로그인하세요.')}</p>
+    <label class="field"><span>${tr('이메일')}</span><input id="login-email" name="email" type="email" autocomplete="username" required></label>
+    <label class="field"><span>${tr('비밀번호')}</span><input id="login-pw" name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary wide" type="submit">${tr('로그인')}</button>
     <p class="err" id="login-err" hidden></p>
   </form>`;
+  if (prev) {
+    $('#login-email').value = prev.email;
+    $('#login-pw').value = prev.pw;
+    if (prev.err) { $('#login-err').hidden = false; $('#login-err').textContent = tr('로그인하지 못했습니다. 이메일과 비밀번호를 확인하세요.'); }
+  }
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -619,21 +644,21 @@ function renderLogin() {
       location.reload();
     } catch (err) {
       $('#login-err').hidden = false;
-      $('#login-err').textContent = '로그인하지 못했습니다. 이메일과 비밀번호를 확인하세요.';
+      $('#login-err').textContent = tr('로그인하지 못했습니다. 이메일과 비밀번호를 확인하세요.');
     }
   });
 }
 
 /* ---------- 시트(입력창) ---------- */
 
-function openSheet({ title, body, submit = '저장', onSubmit, onChange, extra = '' }) {
+function openSheet({ title, body, submit = tr('저장'), onSubmit, onChange, extra = '' }) {
   const wrap = document.createElement('div');
   wrap.className = 'sheet-wrap';
   wrap.innerHTML = `<form class="sheet" novalidate>
-    <header><h3>${title}</h3><button type="button" class="icon-btn" data-close aria-label="닫기">×</button></header>
+    <header><h3>${title}</h3><button type="button" class="icon-btn" data-close aria-label="${tr('닫기')}">×</button></header>
     <div class="sheet-body">${body}</div>
     <p class="err" hidden></p>
-    <footer>${extra}<button type="button" class="btn" data-close>취소</button><button class="btn primary" type="submit">${submit}</button></footer>
+    <footer>${extra}<button type="button" class="btn" data-close>${tr('취소')}</button><button class="btn primary" type="submit">${submit}</button></footer>
   </form>`;
   const form = wrap.querySelector('form');
   const close = () => { wrap.remove(); document.body.classList.remove('sheet-open'); renderDeferred && scheduleRender(); };
@@ -657,11 +682,12 @@ function openSheet({ title, body, submit = '저장', onSubmit, onChange, extra =
   return { form, close };
 }
 
-function confirmSheet(message, ok = '삭제') {
+function confirmSheet(message, ok = tr('삭제')) {
   return new Promise((resolve) => {
     let answered = false;
     const s = openSheet({
-      title: '확인', body: `<p>${message}</p>`, submit: ok,
+      title: tr('확인§title'), body:
+ `<p>${message}</p>`, submit: ok,
       onSubmit: () => { answered = true; resolve(true); },
     });
     s.form.querySelector('.btn.primary').classList.add('danger');
@@ -686,9 +712,9 @@ function require(cond, msg) { if (!cond) throw new Error(msg); }
 
 function askName() {
   openSheet({
-    title: '이름을 알려주세요',
-    body: `<p class="muted">수금·지출 기록에 입력자로 남습니다.</p><label class="field"><span>이름</span><input name="name" id="f-name" value="${esc(store.user.name)}" placeholder="예: 김가이드"></label>`,
-    onSubmit: (d) => { require(d.name.trim(), '이름을 입력하세요.'); store.setUserName(d.name.trim()); },
+    title: tr('이름을 알려주세요'),
+    body: `<p class="muted">${tr('수금·지출 기록에 입력자로 남습니다.')}</p><label class="field"><span>${tr('이름')}</span><input name="name" id="f-name" value="${esc(store.user.name)}" placeholder="${tr('예: 김가이드')}"></label>`,
+    onSubmit: (d) => { require(d.name.trim(), tr('이름을 입력하세요.')); store.setUserName(d.name.trim()); },
   });
 }
 
@@ -696,22 +722,22 @@ function sheetTour(t) {
   const isNew = !t;
   t = t || { region: 'DUBAI', tour_code: '', start_date: new Date().toISOString().slice(0, 10), guide: me(), status: 'open' };
   openSheet({
-    title: isNew ? '새 투어' : '투어 정보 수정',
+    title: isNew ? tr('새 투어') : tr('투어 정보 수정'),
     body: `
-      <label class="field"><span>BDY 번호 (숫자만)</span><input name="bdy" id="f-bdy" inputmode="numeric" pattern="[0-9]*" value="${esc(t.bdy || '')}" placeholder="예: 4229"></label>
-      <label class="field"><span>지역</span><select name="region" id="f-region">${Object.entries(REGIONS).map(([k, r]) => opt(k, `${r.label} (${r.currency})`, t.region)).join('')}</select></label>
-      <label class="field"><span>투어 기간 코드</span><input name="tour_code" id="f-code" list="tour-codes" value="${esc(t.tour_code || '')}" placeholder="예: EK3N6D"><datalist id="tour-codes">${TOUR_CODES.map((c) => `<option value="${c}">`).join('')}</datalist></label>
-      <label class="field"><span>출발일</span><input name="start_date" id="f-date" type="date" value="${esc(t.start_date || '')}"></label>
-      <label class="field"><span>가이드 / 인솔자</span><input name="guide" id="f-guide" value="${esc(t.guide || '')}"></label>
-      ${isAdmin() && cloud() ? `<label class="field"><span>담당 직원 (이 투어를 볼 수 있는 사람)</span><select name="owner_id" id="f-owner">
-        ${isNew ? '' : `<option value="" ${t.owner_id ? '' : 'selected'}>담당자 없음 (관리자만)</option>`}
-        ${store.all('profiles').sort((a, b) => String(a.name).localeCompare(String(b.name))).map((p) => opt(p.id, `${p.name || p.id}${p.role === 'admin' ? ' (관리자)' : ''}`, t.owner_id || store.user.id)).join('')}</select></label>` : ''}
+      <label class="field"><span>${tr('BDY 번호 (숫자만)')}</span><input name="bdy" id="f-bdy" inputmode="numeric" pattern="[0-9]*" value="${esc(t.bdy || '')}" placeholder="${tr('예: 4229')}"></label>
+      <label class="field"><span>${tr('지역')}</span><select name="region" id="f-region">${Object.entries(REGIONS).map(([k, r]) => opt(k, `${tr(r.label)} (${r.currency})`, t.region)).join('')}</select></label>
+      <label class="field"><span>${tr('투어 기간 코드')}</span><input name="tour_code" id="f-code" list="tour-codes" value="${esc(t.tour_code || '')}" placeholder="${tr('예: EK3N6D')}"><datalist id="tour-codes">${TOUR_CODES.map((c) => `<option value="${c}">`).join('')}</datalist></label>
+      <label class="field"><span>${tr('출발일')}</span><input name="start_date" id="f-date" type="date" value="${esc(t.start_date || '')}"></label>
+      <label class="field"><span>${tr('가이드 / 인솔자')}</span><input name="guide" id="f-guide" value="${esc(t.guide || '')}"></label>
+      ${isAdmin() && cloud() ? `<label class="field"><span>${tr('담당 직원 (이 투어를 볼 수 있는 사람)')}</span><select name="owner_id" id="f-owner">
+        ${isNew ? '' : `<option value="" ${t.owner_id ? '' : 'selected'}>${tr('담당자 없음 (관리자만)')}</option>`}
+        ${store.all('profiles').sort((a, b) => String(a.name).localeCompare(String(b.name))).map((p) => opt(p.id, `${p.name || p.id}${p.role === 'admin' ? tr(' (관리자)') : ''}`, t.owner_id || store.user.id)).join('')}</select></label>` : ''}
       <div id="rate-fields">${rateFields(t, t.region)}</div>`,
     onChange: (form, e) => { if (e.target.name === 'region') form.querySelector('#rate-fields').innerHTML = rateFields(t, form.region.value); },
-    submit: isNew ? '만들기' : '저장',
+    submit: isNew ? tr('만들기') : tr('저장'),
     onSubmit: async (d) => {
-      require(/^\d+$/.test(d.bdy.trim()), 'BDY 번호는 숫자만 입력하세요.');
-      require(!(await store.bdyTaken(d.bdy.trim(), t.id)), `BDY ${d.bdy} 투어가 이미 있습니다. 다른 직원이 등록했을 수 있으니 관리자에게 확인하세요.`);
+      require(/^\d+$/.test(d.bdy.trim()), tr('BDY 번호는 숫자만 입력하세요.'));
+      require(!(await store.bdyTaken(d.bdy.trim(), t.id)), tr('BDY {bdy} 투어가 이미 있습니다. 다른 직원이 등록했을 수 있으니 관리자에게 확인하세요.', { bdy: d.bdy }));
       const prices = {};
       for (const [k, v] of Object.entries(d)) if (k.startsWith('rate:') && v !== '') prices[k.slice(5)] = num(v);
       const owner = d.owner_id !== undefined ? (d.owner_id || null) : (t.owner_id || (cloud() ? store.user.id : null));
@@ -737,7 +763,7 @@ function rateFields(t, region) {
   const list = store.all('products').filter((p) => p.region === region && p.active !== false && p.rates?.length > 1);
   return list.map((p) => {
     const cur = priceFor(region === t.region ? t : null, p);
-    return `<label class="field"><span>${esc(p.name)} 요금 (이 투어)</span><select name="rate:${esc(p.id)}" id="f-rate-${esc(p.id)}">${p.rates.map((r) => opt(r, money(r, p.currency), cur)).join('')}</select></label>`;
+    return `<label class="field"><span>${tr('{name} 요금 (이 투어)', { name: esc(pname(p)) })}</span><select name="rate:${esc(p.id)}" id="f-rate-${esc(p.id)}">${p.rates.map((r) => opt(r, money(r, p.currency), cur)).join('')}</select></label>`;
   }).join('');
 }
 
@@ -746,21 +772,21 @@ function sheetPax(t, p) {
   const last = store.all('passengers').filter((x) => x.tour_id === t.id).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
   p = p || { group_no: last?.group_no || 1, gender: '' };
   const s = openSheet({
-    title: isNew ? '고객 추가' : '고객 정보',
+    title: isNew ? tr('고객 추가') : tr('고객 정보'),
     body: `
-      <label class="field"><span>그룹</span><input name="group_no" id="f-group" type="number" inputmode="numeric" min="0" value="${esc(p.group_no || '')}"></label>
-      <label class="field"><span>이름 (한글)</span><input name="name_kor" id="f-kor" value="${esc(p.name_kor || '')}" placeholder="홍길동"></label>
-      <label class="field"><span>이름 (영문, 여권)</span><input name="name_eng" id="f-eng" value="${esc(p.name_eng || '')}" placeholder="HONG/GILDONG" autocapitalize="characters"></label>
-      <label class="field"><span>호칭</span><select name="gender" id="f-gender">${opt('', '-', p.gender)}${opt('Mr', 'Mr', p.gender)}${opt('Ms', 'Ms', p.gender)}</select></label>
-      <label class="field"><span>특이사항</span><input name="note" id="f-note" value="${esc(p.note || '')}" placeholder="예: 홈쇼핑 고객, 보상 사유"></label>`,
-    submit: isNew ? '추가' : '저장',
-    extra: isNew ? '<button type="submit" class="btn" name="again" value="1">추가 후 계속</button>' : '<button type="button" class="btn danger" data-del-pax>삭제</button>',
+      <label class="field"><span>${tr('그룹')}</span><input name="group_no" id="f-group" type="number" inputmode="numeric" min="0" value="${esc(p.group_no || '')}"></label>
+      <label class="field"><span>${tr('이름 (한글)')}</span><input name="name_kor" id="f-kor" value="${esc(p.name_kor || '')}" placeholder="홍길동"></label>
+      <label class="field"><span>${tr('이름 (영문, 여권)')}</span><input name="name_eng" id="f-eng" value="${esc(p.name_eng || '')}" placeholder="HONG/GILDONG" autocapitalize="characters"></label>
+      <label class="field"><span>${tr('호칭')}</span><select name="gender" id="f-gender">${opt('', '-', p.gender)}${opt('Mr', 'Mr', p.gender)}${opt('Ms', 'Ms', p.gender)}</select></label>
+      <label class="field"><span>${tr('특이사항')}</span><input name="note" id="f-note" value="${esc(p.note || '')}" placeholder="${tr('예: 홈쇼핑 고객, 보상 사유')}"></label>`,
+    submit: isNew ? tr('추가') : tr('저장'),
+    extra: isNew ? `<button type="submit" class="btn" name="again" value="1">${tr('추가 후 계속')}</button>` : `<button type="button" class="btn danger" data-del-pax>${tr('삭제')}</button>`,
     onSubmit: async (d, form, submitter) => {
-      require(d.name_kor.trim() || d.name_eng.trim(), '이름을 입력하세요.');
+      require(d.name_kor.trim() || d.name_eng.trim(), tr('이름을 입력하세요.'));
       const row = { ...p, id: p.id || uid(), tour_id: t.id, group_no: parseInt(d.group_no, 10) || 0, name_kor: d.name_kor.trim(), name_eng: d.name_eng.trim().toUpperCase(), gender: d.gender, note: d.note.trim(), sort: p.sort ?? Date.now() };
       await store.put('passengers', row);
       if (submitter?.name === 'again') {
-        toast(`${row.name_kor || row.name_eng} 추가됨`, 'good');
+        toast(tr('{name} 추가됨', { name: row.name_kor || row.name_eng }), 'good');
         form.name_kor.value = ''; form.name_eng.value = ''; form.note.value = ''; form.gender.value = '';
         form.name_kor.focus();
         return false;
@@ -770,21 +796,21 @@ function sheetPax(t, p) {
   s.form.querySelector('[data-del-pax]')?.addEventListener('click', async () => {
     if (locked(t)) return;
     const hasPay = store.all('payments').some((x) => x.passenger_id === p.id);
-    if (hasPay) return toast('수금 기록이 있는 고객은 삭제할 수 없습니다. 수금 내역을 먼저 정리하세요.', 'bad');
+    if (hasPay) return toast(tr('수금 기록이 있는 고객은 삭제할 수 없습니다. 수금 내역을 먼저 정리하세요.'), 'bad');
     s.close();
-    if (await confirmSheet(`${esc(p.name_kor || p.name_eng)} 고객과 주문을 삭제할까요?`)) await store.delPassenger(p.id);
+    if (await confirmSheet(tr('{name} 고객과 주문을 삭제할까요?', { name: esc(p.name_kor || p.name_eng) }))) await store.delPassenger(p.id);
   });
 }
 
 function sheetBulk(t) {
   openSheet({
-    title: '명단 붙여넣기',
-    body: `<p class="muted">엑셀에서 <b>그룹 · 한글이름 · 영문이름 · 호칭</b> 순서의 열을 복사해 붙여넣으세요. 한 줄에 한 명이며, 칸은 탭이나 쉼표로 나뉩니다. 그룹이 비어 있으면 윗줄 그룹을 따릅니다.</p>
+    title: tr('명단 붙여넣기'),
+    body: `<p class="muted">${tr('엑셀에서 <b>그룹 · 한글이름 · 영문이름 · 호칭</b> 순서의 열을 복사해 붙여넣으세요. 한 줄에 한 명이며, 칸은 탭이나 쉼표로 나뉩니다. 그룹이 비어 있으면 윗줄 그룹을 따릅니다.')}</p>
       <textarea name="rows" id="f-rows" rows="8" placeholder="1	홍길동	HONG/GILDONG	Mr&#10;	김영희	KIM/YOUNGHEE	Ms"></textarea>`,
-    submit: '추가',
+    submit: tr('추가'),
     onSubmit: async (d) => {
       const lines = d.rows.split(/\r?\n/).filter((l) => l.trim());
-      require(lines.length, '붙여넣은 명단이 없습니다.');
+      require(lines.length, tr('붙여넣은 명단이 없습니다.'));
       let group = 1, n = 0;
       const base = Date.now();
       for (const line of lines) {
@@ -795,7 +821,7 @@ function sheetBulk(t) {
         await store.put('passengers', { id: uid(), tour_id: t.id, group_no: group, name_kor: kor, name_eng: eng.toUpperCase(), gender: /^m(r|s)$/i.test(g) ? g[0].toUpperCase() + g[1].toLowerCase() : '', note: '', sort: base + n });
         n++;
       }
-      toast(`${n}명 추가됨`, 'good');
+      toast(tr('{n}명 추가됨', { n }), 'good');
     },
   });
 }
@@ -809,19 +835,19 @@ function sheetPayment(t, paxId) {
   };
   const s0 = suggest(row);
   openSheet({
-    title: '수금 기록',
+    title: tr('수금 기록'),
     body: `
-      <label class="field"><span>고객</span><select name="passenger_id" id="f-pax">${opt('', '공통 (특정 고객 아님)', paxId || '')}${c.passengers.map((r) => {
+      <label class="field"><span>${tr('고객')}</span><select name="passenger_id" id="f-pax">${opt('', tr('공통 (특정 고객 아님)'), paxId || '')}${c.passengers.map((r) => {
         const owe = Object.fromEntries(Object.entries(r.balance).filter(([, v]) => v > 0));
-        return opt(r.p.id, `G${r.p.group_no || '-'} ${r.p.name_kor || r.p.name_eng}${Object.keys(owe).length ? ' · 미수 ' + moneyList(owe) : ''}`, paxId || '');
+        return opt(r.p.id, `G${r.p.group_no || '-'} ${r.p.name_kor || r.p.name_eng}${Object.keys(owe).length ? tr(' · 미수 {amt}', { amt: moneyList(owe) }) : ''}`, paxId || '');
       }).join('')}</select></label>
       <div class="field-row">
-        <label class="field"><span>통화</span><select name="currency" id="f-cur">${CURRENCIES.map((k) => opt(k, k, s0.cur)).join('')}</select></label>
-        <label class="field grow"><span>금액</span><input name="amount" id="f-amt" type="number" inputmode="decimal" step="0.01" value="${esc(s0.amt)}" placeholder="0"></label>
+        <label class="field"><span>${tr('통화')}</span><select name="currency" id="f-cur">${CURRENCIES.map((k) => opt(k, k, s0.cur)).join('')}</select></label>
+        <label class="field grow"><span>${tr('금액')}</span><input name="amount" id="f-amt" type="number" inputmode="decimal" step="0.01" value="${esc(s0.amt)}" placeholder="0"></label>
       </div>
-      <div class="field"><span>방법</span><div class="seg">${Object.entries(PAY_METHODS).map(([k, l], i) => `<label class="radio"><input type="radio" name="method" value="${k}" ${i === 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
-      <label class="field"><span>메모</span><input name="note" id="f-pnote" placeholder="선택"></label>`,
-    submit: '수금 저장',
+      <div class="field"><span>${tr('방법')}</span><div class="seg">${Object.entries(PAY_METHODS).map(([k, l], i) => `<label class="radio"><input type="radio" name="method" value="${k}" ${i === 0 ? 'checked' : ''}><span>${tr(l)}</span></label>`).join('')}</div></div>
+      <label class="field"><span>${tr('메모')}</span><input name="note" id="f-pnote" placeholder="${tr('선택§optional')}"></label>`,
+    submit: tr('수금 저장'),
     onChange: (form, e) => {
       if (e.target.name !== 'passenger_id') return;
       const s = suggest(c.passengers.find((r) => r.p.id === form.passenger_id.value));
@@ -830,10 +856,10 @@ function sheetPayment(t, paxId) {
     },
     onSubmit: async (d) => {
       const amount = round2(num(d.amount));
-      require(amount > 0, '금액을 입력하세요.');
+      require(amount > 0, tr('금액을 입력하세요.'));
       await store.put('payments', { id: uid(), tour_id: t.id, passenger_id: d.passenger_id || null, currency: d.currency, amount, method: d.method, note: d.note.trim(), created_by: me() });
       navigator.vibrate?.(20);
-      toast(`${money(amount, d.currency)} 수금 기록됨`, 'good');
+      toast(tr('{amt} 수금 기록됨', { amt: money(amount, d.currency) }), 'good');
     },
   });
 }
@@ -841,25 +867,28 @@ function sheetPayment(t, paxId) {
 function sheetExpense(t) {
   const main = REGIONS[t.region]?.currency || 'USD';
   openSheet({
-    title: '지출 기록',
+    title: tr('지출 기록'),
     body: `
-      <div class="field"><span>구분</span><div class="seg"><label class="radio"><input type="radio" name="kind" value="expense" checked><span>투어 지출</span></label><label class="radio"><input type="radio" name="kind" value="transfer"><span>계좌이체·환전</span></label></div></div>
+      <div class="field"><span>${tr('구분')}</span><div class="seg"><label class="radio"><input type="radio" name="kind" value="expense" checked><span>${tr('투어 지출')}</span></label><label class="radio"><input type="radio" name="kind" value="transfer"><span>${tr('계좌이체·환전')}</span></label></div></div>
       <div class="field-row">
-        <label class="field"><span>장소</span><select name="place" id="f-place">${EXPENSE_PLACES.map((p) => opt(p, p, REGIONS[t.region]?.label)).join('')}</select></label>
-        <label class="field grow"><span>항목</span><input name="category" id="f-cat" list="exp-cats" placeholder="팁, 커미션…"><datalist id="exp-cats">${EXPENSE_CATEGORIES.map((x) => `<option value="${x}">`).join('')}</datalist></label>
+        <label class="field"><span>${tr('장소')}</span><select name="place" id="f-place">${EXPENSE_PLACES.map((p) => opt(p, tr(p), REGIONS[t.region]?.label)).join('')}</select></label>
+        <label class="field grow"><span>${tr('항목')}</span><input name="category" id="f-cat" list="exp-cats" placeholder="${tr('팁, 커미션…')}"><datalist id="exp-cats">${EXPENSE_CATEGORIES.map((x) => `<option value="${esc(tr(x))}">`).join('')}</datalist></label>
       </div>
       <div class="field-row">
-        <label class="field"><span>통화</span><select name="currency" id="f-ecur">${CURRENCIES.map((k) => opt(k, k, main)).join('')}</select></label>
-        <label class="field grow"><span>금액</span><input name="amount" id="f-eamt" type="number" inputmode="decimal" step="0.01" placeholder="0"></label>
+        <label class="field"><span>${tr('통화')}</span><select name="currency" id="f-ecur">${CURRENCIES.map((k) => opt(k, k, main)).join('')}</select></label>
+        <label class="field grow"><span>${tr('금액')}</span><input name="amount" id="f-eamt" type="number" inputmode="decimal" step="0.01" placeholder="0"></label>
       </div>
-      <label class="field"><span>메모</span><input name="note" id="f-enote" placeholder="예: 사파리 드라이버 팁"></label>`,
-    submit: '지출 저장',
+      <label class="field"><span>${tr('메모')}</span><input name="note" id="f-enote" placeholder="${tr('예: 사파리 드라이버 팁')}"></label>`,
+    submit: tr('지출 저장'),
     onSubmit: async (d) => {
       const amount = round2(num(d.amount));
-      require(amount > 0, '금액을 입력하세요.');
-      require(d.category.trim(), '항목을 입력하세요.');
-      await store.put('expenses', { id: uid(), tour_id: t.id, kind: d.kind, place: d.place, category: d.category.trim(), currency: d.currency, amount, note: d.note.trim(), created_by: me() });
-      toast('지출 기록됨', 'good');
+      require(amount > 0, tr('금액을 입력하세요.'));
+      require(d.category.trim(), tr('항목을 입력하세요.'));
+      // 영어 화면에서 고른 기본 항목(Tip 등)도 저장은 한국어로 (다른 직원 화면·엑셀과 맞춤)
+      const cat = d.category.trim();
+      const category = EXPENSE_CATEGORIES.find((x) => x === cat || tr(x).toLowerCase() === cat.toLowerCase()) || cat;
+      await store.put('expenses', { id: uid(), tour_id: t.id, kind: d.kind, place: d.place, category, currency: d.currency, amount, note: d.note.trim(), created_by: me() });
+      toast(tr('지출 기록됨'), 'good');
     },
   });
 }
@@ -868,28 +897,30 @@ function sheetProduct(p) {
   const isNew = !p;
   p = p || { region: ui.productRegion, currency: REGIONS[ui.productRegion].currency, units: 1, active: true };
   const s = openSheet({
-    title: isNew ? '상품 추가' : '상품 수정',
+    title: isNew ? tr('상품 추가') : tr('상품 수정'),
     body: `
-      <label class="field"><span>지역</span><select name="region" id="f-preg">${Object.entries(REGIONS).map(([k, r]) => opt(k, r.label, p.region)).join('')}</select></label>
-      <label class="field"><span>상품명</span><input name="name" id="f-pname" value="${esc(p.name || '')}"></label>
+      <label class="field"><span>${tr('지역')}</span><select name="region" id="f-preg">${Object.entries(REGIONS).map(([k, r]) => opt(k, tr(r.label), p.region)).join('')}</select></label>
+      <label class="field"><span>${tr('상품명')}</span><input name="name" id="f-pname" value="${esc(p.name || '')}"></label>
+      <label class="field"><span>${tr('영문 이름 (English name)')}</span><input name="name_en" id="f-pname-en" value="${esc(p.name_en || '')}" placeholder="${tr('선택§optional')}"></label>
       <div class="field-row">
-        <label class="field grow"><span>가격</span><input name="price" id="f-pprice" type="number" inputmode="decimal" step="0.01" value="${esc(p.price ?? '')}"></label>
-        <label class="field"><span>통화</span><select name="currency" id="f-pcur">${CURRENCIES.map((k) => opt(k, k, p.currency)).join('')}</select></label>
+        <label class="field grow"><span>${tr('가격')}</span><input name="price" id="f-pprice" type="number" inputmode="decimal" step="0.01" value="${esc(p.price ?? '')}"></label>
+        <label class="field"><span>${tr('통화')}</span><select name="currency" id="f-pcur">${CURRENCIES.map((k) => opt(k, k, p.currency)).join('')}</select></label>
       </div>
-      <label class="field"><span>투어별 요금 선택지 (선택)</span><input name="rates" id="f-prates" inputmode="decimal" value="${esc((p.rates || []).join(', '))}" placeholder="예: 90, 100 → 투어 만들 때 고름"></label>
-      <label class="check-field"><input type="checkbox" name="combo" id="f-combo" ${p.units > 1 ? 'checked' : ''}> 결합상품 (옵션 수를 2개로 계산)</label>
-      <label class="check-field"><input type="checkbox" name="active" id="f-active" ${p.active !== false ? 'checked' : ''}> 주문서에 표시</label>`,
-    extra: isNew ? '' : '<button type="button" class="btn danger" data-del-prd>삭제</button>',
+      <label class="field"><span>${tr('투어별 요금 선택지 (선택)')}</span><input name="rates" id="f-prates" inputmode="decimal" value="${esc((p.rates || []).join(', '))}" placeholder="${tr('예: 90, 100 → 투어 만들 때 고름')}"></label>
+      <label class="check-field"><input type="checkbox" name="combo" id="f-combo" ${p.units > 1 ? 'checked' : ''}> ${tr('결합상품 (옵션 수를 2개로 계산)')}</label>
+      <label class="check-field"><input type="checkbox" name="active" id="f-active" ${p.active !== false ? 'checked' : ''}> ${tr('주문서에 표시')}</label>`,
+    extra: isNew ? '' : `<button type="button" class="btn danger" data-del-prd>${tr('삭제')}</button>`,
     onSubmit: async (d) => {
-      require(d.name.trim(), '상품명을 입력하세요.');
+      require(d.name.trim(), tr('상품명을 입력하세요.'));
       const max = Math.max(0, ...store.all('products').map((x) => x.sort || 0));
-      await store.put('products', { ...p, id: p.id || uid(), region: d.region, name: d.name.trim(), price: round2(num(d.price)), rates: parseRates(d.rates), currency: d.currency, units: d.combo ? 2 : 1, active: !!d.active, sort: p.sort ?? max + 10 });
+      await store.put('products', { ...p, id: p.id || uid(), region: d.region, name: d.name.trim(), ...(d.name_en.trim() || 'name_en' in p ? { name_en: d.name_en.trim() || null } : {}), price: round2(num(d.price)), rates: parseRates(d.rates), currency: d.currency, units: d.combo ? 2 : 1, active: !!d.active, sort: p.sort ?? max + 10 });
     },
   });
   s.form.querySelector('[data-del-prd]')?.addEventListener('click', async () => {
-    if (store.all('orders').some((o) => o.product_id === p.id)) return toast('주문에 쓰인 상품은 삭제 대신 ‘주문서에 표시’를 끄세요.', 'bad');
+    if (store.all('orders').some((o) => o.product_id === p.id)) return toast(tr('주문에 쓰인 상품은 삭제 대신 ‘주문서에 표시’를 끄세요.'), 'bad');
     s.close();
-    if (await confirmSheet(`${esc(p.name)} 상품을 삭제할까요?`)) await store.del('products', p.id);
+    if (await confirmSheet(tr('{name} 상품을 삭제할까요?', { name: esc(pname(p)) }))) await store.del('products', p.id);
+
   });
 }
 
@@ -925,19 +956,19 @@ const actions = {
   'del-pay': async (d) => {
     const t = currentTour(); if (!t || locked(t)) return;
     const p = store.get('payments', d.id);
-    if (p && await confirmSheet(`${money(p.amount, p.currency)} 수금 기록을 삭제할까요?`)) await store.del('payments', d.id);
+    if (p && await confirmSheet(tr('{amt} 수금 기록을 삭제할까요?', { amt: money(p.amount, p.currency) }))) await store.del('payments', d.id);
   },
   'add-exp': () => { const t = currentTour(); if (t && !locked(t)) sheetExpense(t); },
   'del-exp': async (d) => {
     const t = currentTour(); if (!t || locked(t)) return;
     const e = store.get('expenses', d.id);
-    if (e && await confirmSheet(`${esc(e.category)} ${money(e.amount, e.currency)} 지출 기록을 삭제할까요?`)) await store.del('expenses', d.id);
+    if (e && await confirmSheet(tr('{what} {amt} 지출 기록을 삭제할까요?', { what: esc(valLabel(e.category)), amt: money(e.amount, e.currency) }))) await store.del('expenses', d.id);
   },
   status: async (d) => {
     const t = currentTour(); if (!t) return;
-    if (d.to === 'closed' && !(await confirmSheet('정산을 완료하면 이 투어는 더 이상 수정할 수 없습니다. 완료할까요?', '정산 완료'))) return;
+    if (d.to === 'closed' && !(await confirmSheet(tr('정산을 완료하면 이 투어는 더 이상 수정할 수 없습니다. 완료할까요?'), tr('정산 완료§btn')))) return;
     await store.patch('tours', t.id, { status: d.to });
-    toast(STATUS[d.to].label + '(으)로 변경됨', 'good');
+    toast(tr('{status}(으)로 변경됨', { status: tr(STATUS[d.to].label) }), 'good');
   },
   check: async (d) => {
     const t = currentTour(); if (!t) return;
@@ -948,7 +979,7 @@ const actions = {
     try {
       const { exportTour } = await import('./excel.js');
       await downloadFile(await exportTour(store, t));
-    } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
+    } catch (err) { toast(err.message || tr('엑셀 파일을 만들지 못했습니다.'), 'bad'); }
   },
   'order-dl': async () => {
     const t = currentTour(); if (!t) return;
@@ -956,8 +987,8 @@ const actions = {
       const { exportOrder } = await import('./excel.js');
       const snap = orderSnapshot(store, t);
       const last = tourRequests(t.id)[0];
-      await downloadFile(await exportOrder(t, { ...snap, created_by: me() }, last?.items));
-    } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
+      await downloadFile(await exportOrder(t, { ...snap, created_by: me() }, last && withEn(last.items)));
+    } catch (err) { toast(err.message || tr('엑셀 파일을 만들지 못했습니다.'), 'bad'); }
   },
   'order-send': () => { const t = currentTour(); if (t && !locked(t)) sheetOrder(t); },
   'order-mail': () => { const t = currentTour(); const r = t && tourRequests(t.id)[0]; if (r) emailOrder(t, r); },
@@ -968,18 +999,18 @@ const actions = {
     try {
       const { exportOrder } = await import('./excel.js');
       const prev = tourRequests(t.id).find((x) => (x.version || 0) < (r.version || 0));
-      await downloadFile(await exportOrder(t, r, prev?.items));
-    } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
+      await downloadFile(await exportOrder(t, { ...r, items: withEn(r.items) }, prev && withEn(prev.items)));
+    } catch (err) { toast(err.message || tr('엑셀 파일을 만들지 못했습니다.'), 'bad'); }
   },
   'req-ok': async (d) => {
     if (!canReceiveOrders()) return;
     await store.patch('order_requests', d.id, { status: 'received', received_by: me(), received_at: new Date().toISOString() });
-    toast('주문서를 확인 처리했습니다.', 'good');
+    toast(tr('주문서를 확인 처리했습니다.'), 'good');
   },
   'del-tour': async (d) => {
     const t = store.get('tours', d.id);
-    if (!canDeleteTour(t)) return toast(t?.status === 'closed' ? '정산 완료된 투어는 관리자만 삭제할 수 있습니다.' : '이미 주문한 투어는 관리자만 삭제할 수 있습니다.', 'bad');
-    if (t && await confirmSheet(`BDY ${esc(t.bdy)} 투어와 모든 주문·수금·지출 기록을 삭제할까요? 되돌릴 수 없습니다.`)) {
+    if (!canDeleteTour(t)) return toast(t?.status === 'closed' ? tr('정산 완료된 투어는 관리자만 삭제할 수 있습니다.') : tr('이미 주문한 투어는 관리자만 삭제할 수 있습니다.'), 'bad');
+    if (t && await confirmSheet(tr('BDY {bdy} 투어와 모든 주문·수금·지출 기록을 삭제할까요? 되돌릴 수 없습니다.', { bdy: esc(t.bdy) }))) {
       await store.delTour(t.id);
       location.hash = '#/';
     }
@@ -990,9 +1021,9 @@ const actions = {
   'set-name': () => askName(),
   'reset-local': async (d) => {
     const sample = d.sample === '1';
-    if (await confirmSheet(sample ? '이 기기의 체험 데이터를 지우고 예시 데이터로 되돌릴까요?' : '이 기기의 체험 데이터를 모두 지울까요?', sample ? '되돌리기' : '모두 지우기')) {
+    if (await confirmSheet(sample ? tr('이 기기의 체험 데이터를 지우고 예시 데이터로 되돌릴까요?') : tr('이 기기의 체험 데이터를 모두 지울까요?'), sample ? tr('되돌리기') : tr('모두 지우기'))) {
       store.reset(sample);
-      toast('완료', 'good');
+      toast(tr('완료§done'), 'good');
     }
   },
   'change-pw': () => sheetPassword(),
@@ -1000,8 +1031,35 @@ const actions = {
   install: async () => { if (!installEvent) return; installEvent.prompt(); await installEvent.userChoice; installEvent = null; render(); },
 };
 
+/* ---------- 언어 ---------- */
+
+const langButtons = () => [['ko', 'KOR'], ['en', 'ENG']].map(([k, l]) => `<button type="button" class="${getLang() === k ? 'on' : ''}" data-lang="${k}" aria-pressed="${getLang() === k}" lang="${k}">${l}</button>`).join('');
+
+// index.html 에 고정된 글자(메뉴, 불러오는 중 등)와 위쪽 언어 버튼을 현재 언어로
+function applyLang() {
+  document.documentElement.lang = getLang();
+  document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = tr(el.dataset.t); });
+  document.querySelectorAll('[data-t-aria]').forEach((el) => el.setAttribute('aria-label', tr(el.dataset.tAria)));
+  const box = $('#lang');
+  if (box) { box.innerHTML = langButtons(); box.setAttribute('aria-label', tr('언어')); }
+}
+
+function switchLang(l) {
+  if (l === getLang()) return;
+  setLang(l);
+  applyLang();
+  if (document.body.classList.contains('login')) renderLogin();
+  else if (store?.user) { lastRenderKey = ''; render(); }
+}
+
 function bindEvents() {
+  // 언어 버튼은 로그인 전에도 동작 (store 가 없어도)
   document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lang]');
+    if (b) { e.preventDefault(); switchLang(b.dataset.lang); }
+  });
+  document.addEventListener('click', (e) => {
+
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled || !store) return;
     e.preventDefault();

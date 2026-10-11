@@ -3,6 +3,7 @@
 //  - SupabaseStore: 실제 운영. 모든 직원 기기가 실시간으로 같은 데이터를 봅니다.
 //    인터넷이 끊기면 변경을 기기에 보관했다가 연결되면 자동 전송합니다.
 import { DEFAULT_PRODUCTS, sampleData } from './seed.js';
+import { t } from './i18n.js';
 
 export const TABLES = ['products', 'tours', 'passengers', 'orders', 'payments', 'expenses', 'profiles', 'order_requests'];
 
@@ -37,7 +38,7 @@ class BaseStore {
   // 같은 BDY 번호가 이미 있는지 (체험 모드: 이 기기 데이터만)
   async bdyTaken(bdy, exceptId) { return this.all('tours').some((t) => t.bdy === bdy && t.id !== exceptId); }
   // 주문서를 주문 담당자에게 이메일로 보내기 (체험 모드에서는 보내지 않음)
-  async sendOrderEmail() { throw new Error('체험 모드에서는 이메일을 보내지 않습니다.'); }
+  async sendOrderEmail() { throw new Error(t('체험 모드에서는 이메일을 보내지 않습니다.')); }
   // 하위 데이터까지 같이 지우기
   async delTour(id) {
     await this.del('tours', id);
@@ -61,13 +62,14 @@ export class LocalStore extends BaseStore {
     const saved = ls.get(this.key);
     if (saved) {
       for (const t of TABLES) for (const r of saved[t] || []) this._set(t, r);
-      // 예전 체험 데이터에 새 기본값(투어별 요금 선택지) 채우기
+      // 예전 체험 데이터에 새 기본값(투어별 요금 선택지, 영문 이름) 채우기
       for (const p of DEFAULT_PRODUCTS) {
         const cur = this.get('products', p.id);
         if (!cur) this._set('products', { ...p });
         else {
           if (cur.rates === undefined) this._set('products', { ...this.get('products', p.id), rates: p.rates });
           if (cur.region === 'DUBAI' && cur.currency === 'USD' && p.currency === 'AED') this._set('products', { ...this.get('products', p.id), currency: 'AED' });
+          if (cur.name_en === undefined) this._set('products', { ...this.get('products', p.id), name_en: p.name_en });
         }
       }
     } else {
@@ -152,9 +154,9 @@ export class SupabaseStore extends BaseStore {
     const email = data.user?.email;
     // 현재 비밀번호가 맞는지 먼저 확인
     const check = await this.sb.auth.signInWithPassword({ email, password: current });
-    if (check.error) throw new Error('현재 비밀번호가 맞지 않습니다.');
+    if (check.error) throw new Error(t('현재 비밀번호가 맞지 않습니다.'));
     const { error } = await this.sb.auth.updateUser({ password: next });
-    if (error) throw new Error(error.message.includes('different') ? '지금과 다른 비밀번호를 입력하세요.' : '비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도하세요.');
+    if (error) throw new Error(error.message.includes('different') ? t('지금과 다른 비밀번호를 입력하세요.') : t('비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도하세요.'));
   }
   // 서버에서는 투어만 지우면 하위 기록이 함께 지워집니다(on delete cascade).
   // 하위 기록을 따로 지우지 않으므로, 권한이 없어 투어 삭제가 거절되면 기록은 그대로 남습니다.
@@ -169,12 +171,12 @@ export class SupabaseStore extends BaseStore {
   }
   async sendOrderEmail(body) {
     let res;
-    try { res = await this.sb.functions.invoke('send-order', { body }); } catch { throw new Error('인터넷 연결을 확인하세요.'); }
+    try { res = await this.sb.functions.invoke('send-order', { body }); } catch { throw new Error(t('인터넷 연결을 확인하세요.')); }
     if (!res.error) return res.data;
     let msg = '';
     try { msg = (await res.error.context.json()).error; } catch { /* 응답 없음 */ }
-    if (!msg && /Failed to send|fetch/i.test(res.error.message)) msg = navigator.onLine ? '이메일 기능이 아직 설정되지 않았습니다.' : '인터넷 연결을 확인하세요.';
-    throw new Error(msg || res.error.message);
+    if (!msg && /Failed to send|fetch/i.test(res.error.message)) msg = navigator.onLine ? t('이메일 기능이 아직 설정되지 않았습니다.') : t('인터넷 연결을 확인하세요.');
+    throw new Error(msg ? serverMsg(msg) : res.error.message);
   }
   // 다른 직원 투어는 보이지 않으므로 서버에 번호만 물어봄. 오프라인이면 이 기기 데이터로 확인.
   async bdyTaken(bdy, exceptId) {
@@ -306,10 +308,16 @@ export class SupabaseStore extends BaseStore {
   }
 }
 
+// 이메일 함수(send-order)가 돌려주는 한국어 오류를 현재 언어로 ('…: 자세한 내용' 형태도)
+function serverMsg(m) {
+  const [, head, rest] = /^([^:]+): ([\s\S]*)$/.exec(m) || [];
+  return head ? t(head + ': {msg}', { msg: rest }) : t(m);
+}
+
 function saveError(op, err) {
-  if (err.code === '23505' && op.table === 'tours') return `저장 실패: BDY ${op.row?.bdy || ''} 번호는 이미 등록되어 있습니다.`;
-  if (err.code === '42501' || /row-level security/i.test(err.message)) return '저장 실패: 이 투어를 고칠 권한이 없습니다.';
-  return '저장 실패: ' + err.message;
+  if (err.code === '23505' && op.table === 'tours') return t('저장 실패: BDY {bdy} 번호는 이미 등록되어 있습니다.', { bdy: op.row?.bdy || '' });
+  if (err.code === '42501' || /row-level security/i.test(err.message)) return t('저장 실패: 이 투어를 고칠 권한이 없습니다.');
+  return t('저장 실패: {msg}', { msg: err.message });
 }
 
 function isNetworkError(err) {

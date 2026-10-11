@@ -81,6 +81,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .conn.warn::before { background: var(--warn); opacity: 1; }
 .conn.bad::before { background: var(--bad); opacity: 1; }
 .conn.demo::before { background: var(--gold); opacity: 1; }
+/* 언어 선택 (KOR | ENG) */
+.seg.lang { flex-wrap: nowrap; flex: none; padding: 2px; border-radius: 8px; }
+.seg.lang button { padding: 3px 7px; font-size: 11px; line-height: 1.2; border-radius: 6px; font-family: var(--mono); letter-spacing: .02em; }
 
 .view { max-width: 760px; margin: 0 auto; padding-inline: 16px; padding-block: 16px; }
 .view:has(.matrix) { max-width: 1200px; }
@@ -93,6 +96,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .nav a { flex: 1; max-width: 160px; height: var(--nav-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; line-height: 1.2; color: var(--muted); text-decoration: none; }
 .nav a span { font-size: 17px; line-height: 1; }
+.nav a b { font-weight: inherit; }
 .nav a.on { color: var(--accent); font-weight: 600; }
 body.login .nav { display: none; }
 
@@ -307,7 +311,12 @@ textarea, .field input, .field select { width: 100%; padding: 10px 12px; border:
 
 @media (max-width: 420px) {
   .who { display: none; }
+  .topbar { gap: 8px; }
+  .conn { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
   .field-row .field { flex-basis: 92px; }
+}
+@media (max-width: 374px) {
+  .brand .logo { height: 24px; }
 }
 .check-field.small { font-size: 13px; color: var(--muted); margin: 0 0 0 auto; }
 .check-field.small + .seg.small { margin-left: 0; }

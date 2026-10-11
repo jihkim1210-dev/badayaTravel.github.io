@@ -1,4 +1,4 @@
--- update_2610111416
+-- update_2610111438
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 
@@ -114,6 +114,8 @@ create table if not exists public.order_requests (
 
 -- 이전 버전 스키마를 이미 실행했어도 다시 실행하면 새 칸이 추가됩니다
 alter table public.products add column if not exists rates jsonb;
+-- 영어 화면·엑셀에서 쓰는 상품 이름 (비어 있으면 한국어 이름)
+alter table public.products add column if not exists name_en text;
 alter table public.tours add column if not exists prices jsonb not null default '{}';
 -- 투어 담당자: 만든 직원. 담당자와 관리자만 그 투어를 볼 수 있습니다.
 alter table public.tours add column if not exists owner_id uuid references auth.users on delete set null default auth.uid();
@@ -299,6 +301,23 @@ on conflict (id) do nothing;
 update public.products set currency = 'AED' where region = 'DUBAI' and currency = 'USD' and id <> 'prd-dubai-33';
 
 update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rates is null;
+
+-- 기본 이집트 상품의 영문 이름 (영어 화면·엑셀용). 이미 정한 이름은 그대로 둡니다.
+update public.products p set name_en = v.name_en
+  from (values
+    ('prd-egypt-03', 'Pyramid Interior + Civilization Museum'),
+    ('prd-egypt-04', 'Pyramid Interior'),
+    ('prd-egypt-05', 'Civilization Museum'),
+    ('prd-egypt-06', 'Carriage Ride + Luxor Temple'),
+    ('prd-egypt-07', 'Tomb of Seti I'),
+    ('prd-egypt-08', 'Philae Temple + Aswan Dam Boat'),
+    ('prd-egypt-09', 'Dendera + Desert Safari'),
+    ('prd-egypt-10', 'Dendera Temple'),
+    ('prd-egypt-11', 'Desert Safari'),
+    ('prd-egypt-12', 'Inside Tutankhamun''s Tomb'),
+    ('prd-egypt-13', 'Burj Khalifa Observation Deck')
+  ) as v(id, name_en)
+ where p.id = v.id and p.name_en is null;
 
 -- 첫 관리자 지정: 대표님 계정을 만든 뒤 이메일을 바꿔서 실행하세요.
 -- update public.profiles set role = 'admin', name = '대표님' where id = (select id from auth.users where email = 'owner@example.com');

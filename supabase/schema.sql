@@ -1,3 +1,4 @@
+-- update_2610111309
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 

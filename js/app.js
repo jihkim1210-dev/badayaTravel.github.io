@@ -18,7 +18,6 @@ const ui = Object.assign({ orderMode: 'cash', orderView: 'table', onlySel: false
 const saveUI = () => ls.set('badaya.ui.v2', { orderMode: ui.orderMode, orderView: ui.orderView, onlySel: ui.onlySel, homeFilter: ui.homeFilter, productRegion: ui.productRegion });
 // 관리자가 처음 만들어 준 공통 비밀번호. 이걸로 로그인하면 홈에서 바꾸라고 안내
 const DEFAULT_PW = 'Badaya123!';
-const DEFAULT_PW_KEY = 'badaya.defaultpw';
 
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; scheduleRender(); });
 
@@ -157,7 +156,6 @@ function viewHome() {
 
   return `
   ${store.status.mode === 'local' ? `<div class="banner">체험 모드입니다. 데이터는 이 기기에만 저장되고, 같은 기기의 다른 탭과만 실시간으로 맞춰집니다. <a href="#/settings">자세히</a></div>` : ''}
-  ${store.status.mode !== 'local' && ls.get(DEFAULT_PW_KEY) === (store.user?.email || '').toLowerCase() ? `<button class="banner install" data-act="change-pw">기본 비밀번호를 쓰고 있어요. 눌러서 내 비밀번호로 바꿔 주세요.</button>` : ''}
   ${installEvent ? `<button class="banner install" data-act="install">휴대폰에 앱으로 설치하기</button>` : ''}
   <section class="kpis">
     <div class="kpi"><span class="label">오늘 수금</span><strong class="fig">${moneyList(todayPaid, '0')}</strong></div>
@@ -558,7 +556,6 @@ function sheetPassword() {
       if (d.next !== d.next2) throw new Error('새 비밀번호 두 칸이 서로 다릅니다.');
       if (d.next === DEFAULT_PW) throw new Error('기본 비밀번호와 다른 비밀번호를 입력하세요.');
       await store.changePassword(d.cur, d.next);
-      ls.del(DEFAULT_PW_KEY);
       toast('비밀번호를 바꿨습니다.', 'good');
       scheduleRender();
     },
@@ -584,7 +581,7 @@ function renderLogin() {
     const f = new FormData(e.target);
     try {
       await store.signIn(f.get('email'), f.get('password'));
-      if (f.get('password') === DEFAULT_PW) ls.set(DEFAULT_PW_KEY, String(f.get('email')).trim().toLowerCase()); else ls.del(DEFAULT_PW_KEY);
+      ls.del('badaya.defaultpw');
       location.reload();
     } catch (err) {
       $('#login-err').hidden = false;

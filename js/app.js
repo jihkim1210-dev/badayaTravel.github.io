@@ -112,6 +112,9 @@ function renderTop() {
 }
 
 const isAdmin = () => store.user?.role === 'admin';
+// 주문 담당자: 받은 주문서만 보고 확인할 수 있음 (투어 내용은 볼 수 없음)
+const isOrderManager = () => !!store.user?.order_manager;
+const canReceiveOrders = () => isAdmin() || isOrderManager();
 const me = () => store.user?.name || '직원';
 
 function timeAgo(iso) {
@@ -161,7 +164,7 @@ function viewHome() {
     <div class="kpi"><span class="label">오늘 수금</span><strong class="fig">${moneyList(todayPaid, '0')}</strong></div>
     <div class="kpi"><span class="label">진행중 투어 미수금</span><strong class="fig ${Object.keys(openOutstanding).length ? 'warn-t' : ''}">${moneyList(openOutstanding, '없음')}</strong></div>
   </section>
-  ${isAdmin() ? orderInbox() : ''}
+  ${canReceiveOrders() ? orderInbox() : ''}
   <div class="row-head">
     <h2>투어</h2>
     <button class="btn primary" data-act="new-tour">+ 새 투어</button>
@@ -185,6 +188,11 @@ function viewHome() {
 }
 
 // 관리자 홈: 직원들이 보낸 주문서
+// 주문서의 투어 정보: 볼 수 있는 투어면 그 투어, 아니면(주문 담당자) 주문할 때 저장한 정보
+function reqTour(r) {
+  return store.get('tours', r.tour_id) || (r.tour_info ? { id: r.tour_id, ...r.tour_info } : null);
+}
+
 function orderInbox() {
   // 투어마다 가장 최근 차수만 (이전 차수는 투어 주문서 탭의 주문 기록에서 볼 수 있음)
   const latest = new Map();
@@ -198,11 +206,12 @@ function orderInbox() {
   const shown = [...fresh, ...reqs.filter((r) => r.status === 'received').slice(0, Math.max(0, 5 - fresh.length))];
   return `<h2 class="sec">받은 주문서 ${fresh.length ? `<span class="pill st-open">새 주문 ${fresh.length}</span>` : ''}</h2>
   <ul class="list inbox">${shown.map((r) => {
-    const t = store.get('tours', r.tour_id);
+    const t = reqTour(r);
     if (!t) return '';
+    const head = `<strong>${tourTitle(t)} · ${esc(r.version)}차 주문</strong>
+        <span class="muted">${esc(r.created_by || '')} · ${shortTime(r.created_at)} · ${r.items.reduce((s, x) => s + x.qty, 0)}건${r.note ? ' · ' + esc(r.note) : ''}</span>`;
     return `<li class="${r.status === 'received' ? 'done' : 'new'}">
-      <a class="li-main" href="#/tour/${esc(t.id)}/orders"><strong>${tourTitle(t)} · ${esc(r.version)}차 주문</strong>
-        <span class="muted">${esc(r.created_by || '')} · ${shortTime(r.created_at)} · ${r.items.reduce((s, x) => s + x.qty, 0)}건${r.note ? ' · ' + esc(r.note) : ''}</span></a>
+      ${store.get('tours', r.tour_id) ? `<a class="li-main" href="#/tour/${esc(t.id)}/orders">${head}</a>` : `<div class="li-main">${head}</div>`}
       <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
       ${r.status === 'received' ? '<span class="paid-ok">확인</span>' : `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>`}
     </li>`;
@@ -299,7 +308,7 @@ function orderBox(t) {
     ${reqs.length ? `<details class="ob-history"><summary>주문 기록 ${reqs.length}건</summary><ul class="list">${reqs.map((r) => `<li>
       <div class="li-main"><strong>${esc(r.version)}차</strong> <span class="muted">${shortTime(r.created_at)} · ${esc(r.created_by || '')} · ${r.items.reduce((s, x) => s + x.qty, 0)}건 · ${r.emailed_at ? '메일 보냄 · ' : ''}${r.status === 'received' ? '확인' : '대기'}</span></div>
       <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
-      ${isAdmin() && r.status !== 'received' ? `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>` : ''}
+      ${canReceiveOrders() && r.status !== 'received' ? `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>` : ''}
     </li>`).join('')}</ul></details>` : ''}
   </section>`;
 }
@@ -321,7 +330,7 @@ function sheetOrder(t) {
       </tbody><tfoot><tr><th>합계</th><td class="fig">${snap.items.reduce((s, x) => s + x.qty, 0)}</td><td class="fig">${moneyList(orderTotals(snap.items), '0')}</td>${last ? '<td></td>' : ''}</tr></tfoot></table>
       <label class="field"><span>남길 말 (선택)</span><textarea name="note" rows="2" placeholder="예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소"></textarea></label>`,
     onSubmit: async (d) => {
-      const req = await store.put('order_requests', { id: uid(), tour_id: t.id, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
+      const req = await store.put('order_requests', { id: uid(), tour_id: t.id, tour_info: { bdy: t.bdy, region: t.region, tour_code: t.tour_code || null, start_date: t.start_date || null, guide: t.guide || null }, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
       if (!cloud()) return toast(`${version}차 주문을 저장했습니다. 체험 모드라 이메일은 보내지 않습니다.`, 'good');
       emailOrder(t, req);
     },
@@ -954,7 +963,7 @@ const actions = {
   'order-mail': () => { const t = currentTour(); const r = t && tourRequests(t.id)[0]; if (r) emailOrder(t, r); },
   'req-dl': async (d) => {
     const r = store.get('order_requests', d.id);
-    const t = r && store.get('tours', r.tour_id);
+    const t = r && reqTour(r);
     if (!t) return;
     try {
       const { exportOrder } = await import('./excel.js');
@@ -963,7 +972,7 @@ const actions = {
     } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
   },
   'req-ok': async (d) => {
-    if (!isAdmin()) return;
+    if (!canReceiveOrders()) return;
     await store.patch('order_requests', d.id, { status: 'received', received_by: me(), received_at: new Date().toISOString() });
     toast('주문서를 확인 처리했습니다.', 'good');
   },

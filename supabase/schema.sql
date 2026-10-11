@@ -1,4 +1,4 @@
--- update_2610111351
+-- update_2610111416
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 
@@ -121,6 +121,8 @@ alter table public.tours add column if not exists owner_id uuid references auth.
 alter table public.profiles add column if not exists order_manager boolean not null default false;
 -- 주문서를 이메일로 보낸 시각
 alter table public.order_requests add column if not exists emailed_at timestamptz;
+-- 주문 당시 투어 정보 (BDY·지역·기간·출발일·가이드). 주문 담당자는 투어를 볼 수 없어서 주문서에 같이 저장합니다.
+alter table public.order_requests add column if not exists tour_info jsonb;
 
 create index if not exists passengers_tour on public.passengers (tour_id);
 create index if not exists orders_tour on public.orders (tour_id);
@@ -150,6 +152,12 @@ $$;
 create or replace function public.can_access_tour(tid text) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.tours where id = tid and (owner_id = auth.uid() or public.is_admin()));
+$$;
+
+-- 주문 담당자인지 (받은 주문서만 보고 확인할 수 있음. 투어의 다른 정보는 볼 수 없음)
+create or replace function public.is_order_manager() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and order_manager);
 $$;
 
 -- BDY 번호가 이미 있는지 (다른 직원 투어 포함). 번호만 알려주고 내용은 보여주지 않습니다.
@@ -206,14 +214,14 @@ begin
 end $$;
 
 drop policy if exists "read order requests" on public.order_requests;
-create policy "read order requests" on public.order_requests for select to authenticated using (public.can_access_tour(tour_id));
+create policy "read order requests" on public.order_requests for select to authenticated using (public.can_access_tour(tour_id) or public.is_order_manager());
 drop policy if exists "send order requests" on public.order_requests;
 create policy "send order requests" on public.order_requests for insert to authenticated with check (public.can_access_tour(tour_id));
 drop policy if exists "admin edits order requests" on public.order_requests;
--- 확인 처리는 관리자. 직원은 관리자가 확인하기 전의 자기 주문서만 (전송이 끊겨 다시 보낼 때 필요)
+-- 확인 처리는 관리자와 주문 담당자. 직원은 확인 전의 자기 주문서만 (이메일 보낸 시각 기록에 필요)
 create policy "admin edits order requests" on public.order_requests for update to authenticated
-  using (public.is_admin() or (status = 'sent' and public.can_access_tour(tour_id)))
-  with check (public.is_admin() or (status = 'sent' and public.can_access_tour(tour_id)));
+  using (public.is_admin() or public.is_order_manager() or (status = 'sent' and public.can_access_tour(tour_id)))
+  with check (public.is_admin() or public.is_order_manager() or (status = 'sent' and public.can_access_tour(tour_id)));
 drop policy if exists "admin deletes order requests" on public.order_requests;
 create policy "admin deletes order requests" on public.order_requests for delete to authenticated using (public.is_admin());
 
@@ -224,6 +232,7 @@ grant select, insert, update, delete on public.profiles, public.products, public
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.can_access_tour(text) to authenticated;
 grant execute on function public.bdy_taken(text, text) to authenticated;
+grant execute on function public.is_order_manager() to authenticated;
 
 -- 주문 담당자 이메일 목록. 이메일 보내는 서버 함수(send-order)만 읽을 수 있고 앱에서는 볼 수 없습니다.
 create or replace function public.order_manager_emails() returns setof text
@@ -293,6 +302,12 @@ update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rat
 
 -- 첫 관리자 지정: 대표님 계정을 만든 뒤 이메일을 바꿔서 실행하세요.
 -- update public.profiles set role = 'admin', name = '대표님' where id = (select id from auth.users where email = 'owner@example.com');
+
+-- 예전 주문서에 투어 정보 채우기 (주문 담당자 화면용)
+update public.order_requests r
+   set tour_info = jsonb_build_object('bdy', t.bdy, 'region', t.region, 'tour_code', t.tour_code, 'start_date', t.start_date, 'guide', t.guide)
+  from public.tours t
+ where t.id = r.tour_id and r.tour_info is null;
 
 -- 주문 담당자 지정: 이 계정에게 주문서 이메일이 갑니다.
 update public.profiles set order_manager = true where id = (select id from auth.users where email = 'field@badayatravel.com');

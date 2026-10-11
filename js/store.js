@@ -207,7 +207,7 @@ export class SupabaseStore extends BaseStore {
   }
   _applyProfile() {
     const p = this.get('profiles', this.user.id);
-    if (p) { this.user.name = p.name || this.user.email; this.user.role = p.role || 'staff'; }
+    if (p) { this.user.name = p.name || this.user.email; this.user.role = p.role || 'staff'; this.user.order_manager = !!p.order_manager; }
   }
   async _fetchAll(t) {
     const rows = [];

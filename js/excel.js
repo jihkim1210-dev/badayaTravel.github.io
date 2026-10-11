@@ -1,5 +1,5 @@
 // 엑셀 내보내기: 기존 양식(CC 시트, PROJECT SETTLEMENT)과 같은 구성으로 만듭니다.
-import { tourCalc, MODES, REGIONS, PAY_METHODS, DENOMS, CURRENCIES, cashOnHand, priceFor } from './calc.js';
+import { tourCalc, MODES, REGIONS, PAY_METHODS, DENOMS, CURRENCIES, cashOnHand, priceFor, orderChanges } from './calc.js';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
@@ -92,7 +92,55 @@ export async function exportTour(store, tour) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exp), '지출 내역');
 
   const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  return new File([data], `BDY${tour.bdy}_${tour.region}_${date}.xlsx`, { type: XLSX_MIME });
+  return new File([data], `BDY${tour.bdy}_${tour.region}_전체_${stamp()}.xlsx`, { type: XLSX_MIME });
+}
+
+// 파일 이름 끝에 붙이는 날짜·시간 (이 기기 시간 기준): 2026-10-11_14-30
+export function stamp(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`;
+}
+
+// 옵션 주문서: req = { version, created_at, created_by, note, pax, items } (아직 보내지 않은 지금 내용이면 version 없음)
+export async function exportOrder(tour, req, prevItems) {
+  const XLSX = await loadXLSX();
+  const when = req.created_at ? new Date(req.created_at) : new Date();
+  const changes = prevItems ? orderChanges(prevItems, req.items) : [];
+  const changed = new Map(changes.map((x) => [x.product_id, x]));
+  const modeKeys = Object.keys(MODES);
+  const wb = XLSX.utils.book_new();
+
+  const a = [];
+  a.push(['OPTION ORDER FORM 옵션 주문서']);
+  a.push(['BDY', tour.bdy, '지역', REGIONS[tour.region]?.label || tour.region, '기간', tour.tour_code || '', '출발일', tour.start_date || '']);
+  a.push(['가이드', tour.guide || '', '주문', req.version ? `${req.version}차` : '보내기 전', '주문 일시', when.toLocaleString('ko-KR'), '작성', req.created_by || '']);
+  a.push(['총원', req.pax, '', '', '', '', '', '']);
+  if (req.note) a.push(['메모', req.note]);
+  a.push([]);
+  a.push(['No', '상품', '단가', '통화', '주문 수량', ...modeKeys.map((k) => MODES[k].label), '티켓 수 (결합 ×2)', ...(prevItems ? ['이전 주문', '변경'] : [])]);
+  const rows = [...req.items];
+  // 이전 주문에는 있었는데 이번에 0이 된 상품도 보이도록
+  for (const x of changes) if (!rows.some((r) => r.product_id === x.product_id)) rows.push({ product_id: x.product_id, name: x.name, price: '', currency: '', qty: 0, modes: {}, units: 1, customers: [] });
+  rows.forEach((it, i) => {
+    const ch = changed.get(it.product_id);
+    a.push([i + 1, it.name, it.price, it.currency, it.qty, ...modeKeys.map((k) => it.modes?.[k] || ''), it.qty * (it.units || 1),
+      ...(prevItems ? [ch ? ch.before : it.qty, ch ? (ch.after - ch.before > 0 ? '+' : '') + (ch.after - ch.before || '명단 변경') : ''] : [])]);
+  });
+  a.push(['', '합계', '', '', req.items.reduce((s, x) => s + x.qty, 0), ...modeKeys.map((k) => req.items.reduce((s, x) => s + (x.modes?.[k] || 0), 0)), req.items.reduce((s, x) => s + x.qty * (x.units || 1), 0)]);
+  const ws = XLSX.utils.aoa_to_sheet(a);
+  ws['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, ...modeKeys.map(() => ({ wch: 8 })), { wch: 14 }, { wch: 10 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws, '주문서');
+
+  const b = [['상품', 'No', '그룹', '이름', '영문', '구분']];
+  for (const it of req.items) it.customers.forEach((x, i) => b.push([i ? '' : it.name, i + 1, x.g || '', x.n, x.e, MODES[x.m]?.label || x.m]));
+  const ws2 = XLSX.utils.aoa_to_sheet(b);
+  ws2['!cols'] = [{ wch: 30 }, { wch: 5 }, { wch: 6 }, { wch: 12 }, { wch: 22 }, { wch: 8 }];
+  XLSX.utils.book_append_sheet(wb, ws2, '고객 명단');
+
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const name = `BDY${tour.bdy}_${tour.region}_주문서${req.version ? `_${req.version}차` : ''}_${stamp(req.created_at)}.xlsx`;
+  return new File([data], name, { type: XLSX_MIME });
 }
 
 // 요약 탭을 열 때 미리 받아 두면, 버튼을 눌렀을 때 바로 저장 창이 뜹니다(아이폰은 누른 직후가 아니면 공유 창을 막습니다).

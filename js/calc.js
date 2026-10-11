@@ -154,3 +154,37 @@ export function tourCalc(store, tour) {
 
   return { passengers: [...byPax.values()], orders, payments, expenses, products, productRows, due, paid, nonCash, unassigned, spent, outstanding, settlement, mainCur };
 }
+
+// 관리자에게 보내는 옵션 주문서: 상품별 주문 수량과 고객 명단 (보낸 순간의 내용을 그대로 저장)
+export function orderSnapshot(store, tour) {
+  const c = tourCalc(store, tour);
+  const items = [];
+  for (const r of c.productRows) {
+    if (!r.applied) continue;
+    const customers = [];
+    for (const row of c.passengers) {
+      const o = row.orders.get(r.product.id);
+      if (o) customers.push({ g: row.p.group_no || 0, n: row.p.name_kor || '', e: row.p.name_eng || '', m: o.mode });
+    }
+    items.push({
+      product_id: r.product.id, name: r.product.name, currency: r.product.currency, price: priceFor(tour, r.product),
+      units: r.product.units || 1, qty: r.applied, modes: r.modes, customers,
+    });
+  }
+  return { pax: c.passengers.length, items };
+}
+
+// 이전 주문 대비 상품별 수량 변화. 바뀐 상품만 돌려줍니다.
+export function orderChanges(prevItems, items) {
+  const before = new Map((prevItems || []).map((x) => [x.product_id, x]));
+  const after = new Map((items || []).map((x) => [x.product_id, x]));
+  const out = [];
+  for (const id of new Set([...before.keys(), ...after.keys()])) {
+    const b = before.get(id), a = after.get(id);
+    const bq = b?.qty || 0, aq = a?.qty || 0;
+    const modesChanged = JSON.stringify(b?.modes || {}) !== JSON.stringify(a?.modes || {});
+    const namesChanged = (b?.customers || []).map((x) => x.n + x.m).join() !== (a?.customers || []).map((x) => x.n + x.m).join();
+    if (bq !== aq || modesChanged || namesChanged) out.push({ product_id: id, name: (a || b).name, before: bq, after: aq });
+  }
+  return out;
+}

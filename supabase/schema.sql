@@ -94,14 +94,35 @@ create table if not exists public.expenses (
   updated_at timestamptz default now()
 );
 
+-- 관리자에게 보낸 옵션 주문서. 보낼 때마다 한 줄씩 쌓입니다 (1차, 2차 …).
+create table if not exists public.order_requests (
+  id text primary key,
+  tour_id text not null references public.tours on delete cascade,
+  version int not null default 1,
+  items jsonb not null default '[]',  -- 상품별 수량·구분·고객 명단 (보낸 순간의 내용)
+  pax int not null default 0,
+  note text,
+  created_by text,
+  created_by_id uuid default auth.uid(),
+  status text not null default 'sent' check (status in ('sent', 'received')),
+  received_by text,
+  received_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- 이전 버전 스키마를 이미 실행했어도 다시 실행하면 새 칸이 추가됩니다
 alter table public.products add column if not exists rates jsonb;
 alter table public.tours add column if not exists prices jsonb not null default '{}';
+-- 투어 담당자: 만든 직원. 담당자와 관리자만 그 투어를 볼 수 있습니다.
+alter table public.tours add column if not exists owner_id uuid references auth.users on delete set null default auth.uid();
 
 create index if not exists passengers_tour on public.passengers (tour_id);
 create index if not exists orders_tour on public.orders (tour_id);
 create index if not exists payments_tour on public.payments (tour_id);
 create index if not exists expenses_tour on public.expenses (tour_id);
+create index if not exists order_requests_tour on public.order_requests (tour_id);
+create index if not exists tours_owner on public.tours (owner_id);
 
 -- 새 직원 계정이 만들어지면 프로필 자동 생성 (기본 권한: staff)
 create or replace function public.handle_new_user() returns trigger
@@ -120,8 +141,20 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
 $$;
 
--- 권한: 로그인한 직원은 투어·주문·수금·지출을 읽고 쓸 수 있음.
---       상품 수정, 투어 삭제, 다른 사람 권한 변경은 관리자만.
+-- 이 투어를 볼 수 있는 사람: 투어 담당자 또는 관리자
+create or replace function public.can_access_tour(tid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.tours where id = tid and (owner_id = auth.uid() or public.is_admin()));
+$$;
+
+-- BDY 번호가 이미 있는지 (다른 직원 투어 포함). 번호만 알려주고 내용은 보여주지 않습니다.
+create or replace function public.bdy_taken(b text, except_id text default null) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.tours where bdy = b and id is distinct from except_id);
+$$;
+
+-- 권한: 직원은 자기가 담당한 투어(와 그 고객·주문·수금·지출·주문서)만 보고 고칠 수 있음.
+--       관리자는 모든 투어를 봅니다. 상품 수정, 투어 삭제, 다른 사람 권한 변경은 관리자만.
 alter table public.profiles enable row level security;
 alter table public.products enable row level security;
 alter table public.tours enable row level security;
@@ -129,6 +162,7 @@ alter table public.passengers enable row level security;
 alter table public.orders enable row level security;
 alter table public.payments enable row level security;
 alter table public.expenses enable row level security;
+alter table public.order_requests enable row level security;
 
 drop policy if exists "read profiles" on public.profiles;
 create policy "read profiles" on public.profiles for select to authenticated using (true);
@@ -141,11 +175,13 @@ drop policy if exists "admin edits products" on public.products;
 create policy "admin edits products" on public.products for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff tours" on public.tours;
-create policy "staff tours" on public.tours for select to authenticated using (true);
+create policy "staff tours" on public.tours for select to authenticated using (owner_id = auth.uid() or public.is_admin());
 drop policy if exists "staff insert tours" on public.tours;
-create policy "staff insert tours" on public.tours for insert to authenticated with check (true);
+create policy "staff insert tours" on public.tours for insert to authenticated with check (owner_id = auth.uid() or public.is_admin());
 drop policy if exists "staff update tours" on public.tours;
-create policy "staff update tours" on public.tours for update to authenticated using (status <> 'closed' or public.is_admin()) with check (true);
+create policy "staff update tours" on public.tours for update to authenticated
+  using ((owner_id = auth.uid() and status <> 'closed') or public.is_admin())
+  with check (owner_id = auth.uid() or public.is_admin());
 drop policy if exists "admin delete tours" on public.tours;
 create policy "admin delete tours" on public.tours for delete to authenticated using (public.is_admin());
 
@@ -154,21 +190,36 @@ declare t text;
 begin
   foreach t in array array['passengers', 'orders', 'payments', 'expenses'] loop
     execute format('drop policy if exists "staff all" on public.%I', t);
-    execute format('create policy "staff all" on public.%I for all to authenticated using (true) with check (true)', t);
+    execute format('drop policy if exists "own tours" on public.%I', t);
+    execute format('create policy "own tours" on public.%I for all to authenticated using (public.can_access_tour(tour_id)) with check (public.can_access_tour(tour_id))', t);
   end loop;
 end $$;
+
+drop policy if exists "read order requests" on public.order_requests;
+create policy "read order requests" on public.order_requests for select to authenticated using (public.can_access_tour(tour_id));
+drop policy if exists "send order requests" on public.order_requests;
+create policy "send order requests" on public.order_requests for insert to authenticated with check (public.can_access_tour(tour_id));
+drop policy if exists "admin edits order requests" on public.order_requests;
+-- 확인 처리는 관리자. 직원은 관리자가 확인하기 전의 자기 주문서만 (전송이 끊겨 다시 보낼 때 필요)
+create policy "admin edits order requests" on public.order_requests for update to authenticated
+  using (public.is_admin() or (status = 'sent' and public.can_access_tour(tour_id)))
+  with check (public.is_admin() or (status = 'sent' and public.can_access_tour(tour_id)));
+drop policy if exists "admin deletes order requests" on public.order_requests;
+create policy "admin deletes order requests" on public.order_requests for delete to authenticated using (public.is_admin());
 
 -- 앱(로그인한 직원)이 테이블을 쓸 수 있게 허용. 프로젝트 생성 때 'Automatically expose new tables'를 꺼도 동작하도록 명시.
 -- 실제로 무엇을 볼 수 있는지는 위의 권한(RLS) 규칙이 정합니다. 로그인하지 않은 사용자(anon)에게는 아무것도 열지 않습니다.
 grant usage on schema public to authenticated;
-grant select, insert, update, delete on public.profiles, public.products, public.tours, public.passengers, public.orders, public.payments, public.expenses to authenticated;
+grant select, insert, update, delete on public.profiles, public.products, public.tours, public.passengers, public.orders, public.payments, public.expenses, public.order_requests to authenticated;
 grant execute on function public.is_admin() to authenticated;
+grant execute on function public.can_access_tour(text) to authenticated;
+grant execute on function public.bdy_taken(text, text) to authenticated;
 
 -- 실시간 전송 켜기
 do $$
 declare t text;
 begin
-  foreach t in array array['profiles', 'products', 'tours', 'passengers', 'orders', 'payments', 'expenses'] loop
+  foreach t in array array['profiles', 'products', 'tours', 'passengers', 'orders', 'payments', 'expenses', 'order_requests'] loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     exception when duplicate_object then null;

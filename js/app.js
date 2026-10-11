@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { LocalStore, SupabaseStore, uid, ls } from './store.js';
 import {
   CURRENCIES, REGIONS, TOUR_CODES, DENOMS, MODES, STATUS, EXPENSE_PLACES, EXPENSE_CATEGORIES, PAY_METHODS,
-  money, moneyList, round2, tourCalc, cashOnHand, priceFor,
+  money, moneyList, round2, tourCalc, cashOnHand, priceFor, orderSnapshot, orderChanges,
 } from './calc.js';
 
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
@@ -125,6 +125,15 @@ function timeAgo(iso) {
 
 function tourTitle(t) { return `BDY ${esc(t.bdy)}`; }
 function statusPill(t) { return `<span class="pill st-${esc(t.status)}">${STATUS[t.status]?.label || esc(t.status)}</span>`; }
+const cloud = () => store.status.mode !== 'local';
+function ownerName(id) {
+  if (!id) return '담당자 없음';
+  if (id === store.user?.id) return me();
+  return store.get('profiles', id)?.name || '알 수 없음';
+}
+// 이 투어에서 관리자에게 보낸 주문서 (최신 차수가 먼저)
+const tourRequests = (tid) => store.all('order_requests').filter((r) => r.tour_id === tid).sort((a, b) => (b.version || 0) - (a.version || 0) || String(b.created_at).localeCompare(String(a.created_at)));
+const shortTime = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 /* ---------- 홈 ---------- */
 
@@ -154,6 +163,7 @@ function viewHome() {
     <div class="kpi"><span class="label">오늘 수금</span><strong class="fig">${moneyList(todayPaid, '0')}</strong></div>
     <div class="kpi"><span class="label">진행중 투어 미수금</span><strong class="fig ${Object.keys(openOutstanding).length ? 'warn-t' : ''}">${moneyList(openOutstanding, '없음')}</strong></div>
   </section>
+  ${isAdmin() ? orderInbox() : ''}
   <div class="row-head">
     <h2>투어</h2>
     <button class="btn primary" data-act="new-tour">+ 새 투어</button>
@@ -176,14 +186,39 @@ function viewHome() {
   </ul>`;
 }
 
+// 관리자 홈: 직원들이 보낸 주문서
+function orderInbox() {
+  // 투어마다 가장 최근 차수만 (이전 차수는 투어 주문서 탭의 주문 기록에서 볼 수 있음)
+  const latest = new Map();
+  for (const r of store.all('order_requests')) {
+    const cur = latest.get(r.tour_id);
+    if (!cur || (r.version || 0) > (cur.version || 0)) latest.set(r.tour_id, r);
+  }
+  const reqs = [...latest.values()].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  if (!reqs.length) return '';
+  const fresh = reqs.filter((r) => r.status !== 'received');
+  const shown = [...fresh, ...reqs.filter((r) => r.status === 'received').slice(0, Math.max(0, 5 - fresh.length))];
+  return `<h2 class="sec">받은 주문서 ${fresh.length ? `<span class="pill st-open">새 주문 ${fresh.length}</span>` : ''}</h2>
+  <ul class="list inbox">${shown.map((r) => {
+    const t = store.get('tours', r.tour_id);
+    if (!t) return '';
+    return `<li class="${r.status === 'received' ? 'done' : 'new'}">
+      <a class="li-main" href="#/tour/${esc(t.id)}/orders"><strong>${tourTitle(t)} · ${esc(r.version)}차 주문</strong>
+        <span class="muted">${esc(r.created_by || '')} · ${shortTime(r.created_at)} · ${r.items.reduce((s, x) => s + x.qty, 0)}건${r.note ? ' · ' + esc(r.note) : ''}</span></a>
+      <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
+      ${r.status === 'received' ? '<span class="paid-ok">확인</span>' : `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>`}
+    </li>`;
+  }).join('')}</ul>`;
+}
+
 function tourCard(t) {
   const c = tourCalc(store, t);
   const cur = c.mainCur;
   const due = c.due[cur] || 0, paid = c.paid[cur] || 0;
   const pct = due ? Math.min(100, Math.round((paid / due) * 100)) : 0;
   return `<a class="tour-card" href="#/tour/${esc(t.id)}/orders">
-    <div class="tc-top"><strong class="bdy">${tourTitle(t)}</strong>${statusPill(t)}</div>
-    <div class="tc-meta">${REGIONS[t.region]?.label || esc(t.region)} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '날짜 미정')} · ${esc(t.guide || '')}</div>
+    <div class="tc-top"><strong class="bdy">${tourTitle(t)}</strong>${isAdmin() && tourRequests(t.id)[0]?.status === 'sent' ? '<span class="pill st-open">새 주문서</span>' : ''}${statusPill(t)}</div>
+    <div class="tc-meta">${REGIONS[t.region]?.label || esc(t.region)} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '날짜 미정')} · ${esc(t.guide || '')}${isAdmin() && cloud() ? ` · 담당 ${esc(ownerName(t.owner_id))}` : ''}</div>
     <div class="tc-figs"><span>${c.passengers.length}명</span><span>판매 ${money(due, cur)}</span><span>수금 ${money(paid, cur)}</span></div>
     <div class="bar" aria-label="수금률 ${pct}%"><i style="width:${pct}%"></i></div>
     ${Object.keys(c.outstanding).length ? `<div class="tc-due">미수 ${moneyList(c.outstanding)}</div>` : ''}
@@ -199,13 +234,13 @@ function viewTour(id, tab) {
   if (!t) return `<div class="empty"><p>투어를 찾을 수 없습니다. 삭제되었을 수 있습니다.</p><a class="btn" href="#/">목록으로</a></div>`;
   const c = tourCalc(store, t);
   const body = { orders: tabOrders, cash: tabCash, expenses: tabExpenses, settle: tabSettle, summary: tabSummary }[tab] || tabOrders;
-  if (tab === 'summary' && !window.XLSX) import('./excel.js').then((m) => m.preloadXLSX()).catch(() => {});
+  if ((tab === 'summary' || tab === 'orders') && !window.XLSX) import('./excel.js').then((m) => m.preloadXLSX()).catch(() => {});
   return `
   <div class="tour-head">
     <a class="back" href="#/" aria-label="목록으로">‹</a>
     <div class="th-main">
       <div class="th-title"><strong class="bdy">${tourTitle(t)}</strong>${statusPill(t)}</div>
-      <div class="tc-meta">${REGIONS[t.region]?.label || ''} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '')} · ${esc(t.guide || '')} · ${c.passengers.length}명${c.products.filter((p) => p.rates?.length > 1).map((p) => ` · ${esc(p.name)} ${money(priceFor(t, p), p.currency)}`).join('')}</div>
+      <div class="tc-meta">${REGIONS[t.region]?.label || ''} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '')} · ${esc(t.guide || '')} · ${c.passengers.length}명${isAdmin() && cloud() ? ` · 담당 ${esc(ownerName(t.owner_id))}` : ''}${c.products.filter((p) => p.rates?.length > 1).map((p) => ` · ${esc(p.name)} ${money(priceFor(t, p), p.currency)}`).join('')}</div>
     </div>
     <button class="icon-btn" data-act="edit-tour" data-id="${esc(t.id)}" aria-label="투어 정보 수정">✎</button>
   </div>
@@ -234,8 +269,64 @@ function tabOrders(t, c) {
     <button class="btn" data-act="bulk-pax">명단 붙여넣기</button>
   </div>`;
   if (!c.passengers.length) return modeBar + actions + `<div class="empty"><p>등록된 고객이 없습니다.</p><p class="muted">한 명씩 추가하거나, 엑셀 명단을 복사해 ‘명단 붙여넣기’로 한 번에 넣을 수 있습니다.</p></div>`;
-  return modeBar + actions + (ui.orderView === 'table' ? ordersTable(t, c) : ordersCards(t, c)) + `
+  return modeBar + actions + orderBox(t) + (ui.orderView === 'table' ? ordersTable(t, c) : ordersCards(t, c)) + `
   <div class="totalbar"><span>현금 판매 합계</span><strong class="fig">${moneyList(c.due, '0')}</strong></div>`;
+}
+
+// 주문서 탭 위쪽: 관리자에게 주문하기 / 다운로드 / 주문 기록
+function orderBox(t) {
+  const reqs = tourRequests(t.id);
+  const last = reqs[0];
+  const snap = orderSnapshot(store, t);
+  const changes = last ? orderChanges(last.items, snap.items) : [];
+  const total = snap.items.reduce((s, x) => s + x.qty, 0);
+  const canSend = t.status !== 'closed' && (last ? changes.length > 0 : total > 0);
+  return `<section class="order-box ${last && changes.length ? 'changed' : ''}">
+    <div class="ob-head">
+      <strong>관리자 주문</strong>
+      <span class="muted">${last ? `${esc(last.version)}차 주문 · ${shortTime(last.created_at)} · ${last.status === 'received' ? '<b class="good-t">관리자 확인</b>' : '확인 대기'}` : '아직 주문하지 않았습니다'}</span>
+    </div>
+    ${last && changes.length ? `<p class="ob-warn">주문 후 바뀐 상품 ${changes.length}개: ${changes.slice(0, 4).map((x) => `${esc(x.name)} ${x.before}→${x.after}`).join(', ')}${changes.length > 4 ? ' …' : ''}</p>` : ''}
+    <div class="row-actions">
+      <button class="btn" data-act="order-dl">주문서 다운로드</button>
+      <button class="btn primary" data-act="order-send" ${canSend ? '' : 'disabled'}>${last ? '바뀐 내용으로 다시 주문하기' : '관리자에게 주문하기'}</button>
+    </div>
+    ${reqs.length ? `<details class="ob-history"><summary>주문 기록 ${reqs.length}건</summary><ul class="list">${reqs.map((r) => `<li>
+      <div class="li-main"><strong>${esc(r.version)}차</strong> <span class="muted">${shortTime(r.created_at)} · ${esc(r.created_by || '')} · ${r.items.reduce((s, x) => s + x.qty, 0)}건 · ${r.status === 'received' ? '확인' : '대기'}</span></div>
+      <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
+      ${isAdmin() && r.status !== 'received' ? `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>` : ''}
+    </li>`).join('')}</ul></details>` : ''}
+  </section>`;
+}
+
+function sheetOrder(t) {
+  const reqs = tourRequests(t.id);
+  const last = reqs[0];
+  const snap = orderSnapshot(store, t);
+  const changes = last ? new Map(orderChanges(last.items, snap.items).map((x) => [x.product_id, x])) : new Map();
+  const gone = [...changes.values()].filter((x) => !snap.items.some((i) => i.product_id === x.product_id));
+  const version = (last?.version || 0) + 1;
+  openSheet({
+    title: `${version}차 주문하기`,
+    submit: '관리자에게 보내기',
+    body: `<p class="muted">BDY ${esc(t.bdy)} · 총 ${snap.pax}명. 아래 수량으로 관리자에게 주문서를 보냅니다.${last ? ' 바뀐 상품은 색으로 표시했습니다.' : ''}</p>
+      <table class="sumtable order-preview"><thead><tr><th>상품</th><th>수량</th>${last ? '<th>이전</th>' : ''}</tr></thead><tbody>
+      ${snap.items.map((x) => { const ch = changes.get(x.product_id); return `<tr class="${ch ? 'chg' : ''}"><th>${esc(x.name)}</th><td class="fig">${x.qty}</td>${last ? `<td class="fig muted">${ch ? ch.before : x.qty}</td>` : ''}</tr>`; }).join('')}
+      ${gone.map((x) => `<tr class="chg"><th>${esc(x.name)}</th><td class="fig">0</td><td class="fig muted">${x.before}</td></tr>`).join('')}
+      </tbody></table>
+      <label class="field"><span>관리자에게 남길 말 (선택)</span><textarea name="note" rows="2" placeholder="예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소"></textarea></label>`,
+    onSubmit: async (d) => {
+      await store.put('order_requests', { id: uid(), tour_id: t.id, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
+      toast(`${version}차 주문서를 관리자에게 보냈습니다.`, 'good');
+    },
+  });
+}
+
+async function downloadFile(file) {
+  const { saveFile } = await import('./excel.js');
+  if (await saveFile(file) === 'retry') {
+    openSheet({ title: '엑셀 파일 준비됨', body: `<p>${esc(file.name)}</p><p class="muted">아래 버튼을 누르면 저장 창이 열립니다.</p>`, submit: '저장하기', onSubmit: () => { saveFile(file); } });
+  }
 }
 
 function groupBy(rows) {
@@ -581,16 +672,19 @@ function sheetTour(t) {
       <label class="field"><span>투어 기간 코드</span><input name="tour_code" id="f-code" list="tour-codes" value="${esc(t.tour_code || '')}" placeholder="예: EK3N6D"><datalist id="tour-codes">${TOUR_CODES.map((c) => `<option value="${c}">`).join('')}</datalist></label>
       <label class="field"><span>출발일</span><input name="start_date" id="f-date" type="date" value="${esc(t.start_date || '')}"></label>
       <label class="field"><span>가이드 / 인솔자</span><input name="guide" id="f-guide" value="${esc(t.guide || '')}"></label>
+      ${isAdmin() && cloud() ? `<label class="field"><span>담당 직원 (이 투어를 볼 수 있는 사람)</span><select name="owner_id" id="f-owner">
+        ${isNew ? '' : `<option value="" ${t.owner_id ? '' : 'selected'}>담당자 없음 (관리자만)</option>`}
+        ${store.all('profiles').sort((a, b) => String(a.name).localeCompare(String(b.name))).map((p) => opt(p.id, `${p.name || p.id}${p.role === 'admin' ? ' (관리자)' : ''}`, t.owner_id || store.user.id)).join('')}</select></label>` : ''}
       <div id="rate-fields">${rateFields(t, t.region)}</div>`,
     onChange: (form, e) => { if (e.target.name === 'region') form.querySelector('#rate-fields').innerHTML = rateFields(t, form.region.value); },
     submit: isNew ? '만들기' : '저장',
     onSubmit: async (d) => {
       require(/^\d+$/.test(d.bdy.trim()), 'BDY 번호는 숫자만 입력하세요.');
-      const dup = store.all('tours').find((x) => x.bdy === d.bdy.trim() && x.id !== t.id);
-      require(!dup, `BDY ${d.bdy} 투어가 이미 있습니다.`);
+      require(!(await store.bdyTaken(d.bdy.trim(), t.id)), `BDY ${d.bdy} 투어가 이미 있습니다. 다른 직원이 등록했을 수 있으니 관리자에게 확인하세요.`);
       const prices = {};
       for (const [k, v] of Object.entries(d)) if (k.startsWith('rate:') && v !== '') prices[k.slice(5)] = num(v);
-      const row = { ...t, id: t.id || uid(), bdy: d.bdy.trim(), region: d.region, tour_code: d.tour_code.trim(), start_date: d.start_date || null, guide: d.guide.trim(), prices, cash_received: t.cash_received || {}, cash_on_hand: t.cash_on_hand || {} };
+      const owner = d.owner_id !== undefined ? (d.owner_id || null) : (t.owner_id || (cloud() ? store.user.id : null));
+      const row = { ...t, id: t.id || uid(), owner_id: owner, bdy: d.bdy.trim(), region: d.region, tour_code: d.tour_code.trim(), start_date: d.start_date || null, guide: d.guide.trim(), prices, cash_received: t.cash_received || {}, cash_on_hand: t.cash_on_hand || {} };
       await store.put('tours', row);
       // 요금을 바꾸면 이 투어에 이미 입력된 주문 가격도 함께 바꿈
       for (const [pid, price] of Object.entries(prices)) {
@@ -821,12 +915,34 @@ const actions = {
   export: async () => {
     const t = currentTour(); if (!t) return;
     try {
-      const { exportTour, saveFile } = await import('./excel.js');
-      const file = await exportTour(store, t);
-      if (await saveFile(file) === 'retry') {
-        openSheet({ title: '엑셀 파일 준비됨', body: `<p>${esc(file.name)}</p><p class="muted">아래 버튼을 누르면 저장 창이 열립니다.</p>`, submit: '저장하기', onSubmit: () => { saveFile(file); } });
-      }
+      const { exportTour } = await import('./excel.js');
+      await downloadFile(await exportTour(store, t));
     } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
+  },
+  'order-dl': async () => {
+    const t = currentTour(); if (!t) return;
+    try {
+      const { exportOrder } = await import('./excel.js');
+      const snap = orderSnapshot(store, t);
+      const last = tourRequests(t.id)[0];
+      await downloadFile(await exportOrder(t, { ...snap, created_by: me() }, last?.items));
+    } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
+  },
+  'order-send': () => { const t = currentTour(); if (t && !locked(t)) sheetOrder(t); },
+  'req-dl': async (d) => {
+    const r = store.get('order_requests', d.id);
+    const t = r && store.get('tours', r.tour_id);
+    if (!t) return;
+    try {
+      const { exportOrder } = await import('./excel.js');
+      const prev = tourRequests(t.id).find((x) => (x.version || 0) < (r.version || 0));
+      await downloadFile(await exportOrder(t, r, prev?.items));
+    } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
+  },
+  'req-ok': async (d) => {
+    if (!isAdmin()) return;
+    await store.patch('order_requests', d.id, { status: 'received', received_by: me(), received_at: new Date().toISOString() });
+    toast('주문서를 확인 처리했습니다.', 'good');
   },
   'del-tour': async (d) => {
     const t = store.get('tours', d.id);

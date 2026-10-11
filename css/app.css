@@ -287,6 +287,21 @@ textarea, .field input, .field select { width: 100%; padding: 10px 12px; border:
 .login-card { max-width: 400px; margin: 40px auto; }
 .login-logo { width: 180px; height: auto; margin: 4px auto 8px; display: block; }
 
+/* 관리자 주문서 */
+.order-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; margin: 0 0 12px; }
+.order-box.changed { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn-soft); }
+.order-box .row-actions { margin: 8px 0 0; }
+.ob-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 14px; }
+.ob-head .muted { font-size: 13px; }
+.ob-warn { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 13px; }
+.ob-history { margin-top: 8px; font-size: 13px; }
+.ob-history summary { cursor: pointer; color: var(--muted); }
+.ob-history .list { margin-top: 6px; }
+.order-preview { width: 100%; margin-bottom: 10px; }
+.order-preview tr.chg th, .order-preview tr.chg td { background: var(--warn-soft); }
+.inbox li.new { background: var(--gold-soft); }
+.inbox .li-main { text-decoration: none; color: inherit; flex-direction: column; }
+
 @media (max-width: 420px) {
   .who { display: none; }
   .field-row .field { flex-basis: 92px; }

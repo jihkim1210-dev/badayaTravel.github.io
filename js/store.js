@@ -4,7 +4,7 @@
 //    인터넷이 끊기면 변경을 기기에 보관했다가 연결되면 자동 전송합니다.
 import { DEFAULT_PRODUCTS, sampleData } from './seed.js';
 
-export const TABLES = ['products', 'tours', 'passengers', 'orders', 'payments', 'expenses', 'profiles'];
+export const TABLES = ['products', 'tours', 'passengers', 'orders', 'payments', 'expenses', 'profiles', 'order_requests'];
 
 export const uid = () =>
   (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
@@ -34,9 +34,11 @@ class BaseStore {
     if (!cur) return;
     return this.put(t, { ...cur, ...changes });
   }
+  // 같은 BDY 번호가 이미 있는지 (체험 모드: 이 기기 데이터만)
+  async bdyTaken(bdy, exceptId) { return this.all('tours').some((t) => t.bdy === bdy && t.id !== exceptId); }
   // 하위 데이터까지 같이 지우기
   async delTour(id) {
-    for (const t of ['orders', 'payments', 'expenses', 'passengers']) {
+    for (const t of ['order_requests', 'orders', 'payments', 'expenses', 'passengers']) {
       for (const r of this.all(t).filter((r) => r.tour_id === id)) await this.del(t, r.id);
     }
     await this.del('tours', id);
@@ -152,6 +154,14 @@ export class SupabaseStore extends BaseStore {
     const { error } = await this.sb.auth.updateUser({ password: next });
     if (error) throw new Error(error.message.includes('different') ? '지금과 다른 비밀번호를 입력하세요.' : '비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도하세요.');
   }
+  // 다른 직원 투어는 보이지 않으므로 서버에 번호만 물어봄. 오프라인이면 이 기기 데이터로 확인.
+  async bdyTaken(bdy, exceptId) {
+    try {
+      const { data, error } = await this.sb.rpc('bdy_taken', { b: bdy, except_id: exceptId || null });
+      if (!error) return !!data;
+    } catch { /* 오프라인 */ }
+    return super.bdyTaken(bdy, exceptId);
+  }
   async signOut() {
     await this.sb.auth.signOut();
     ls.del(this.cacheKey);
@@ -188,7 +198,8 @@ export class SupabaseStore extends BaseStore {
     return rows;
   }
   async reload() {
-    const results = await Promise.all(TABLES.map((t) => this._fetchAll(t)));
+    // 주문서 표(order_requests)는 서버 설정(schema.sql)을 다시 실행하기 전에는 없을 수 있어 비어 있는 것으로 처리
+    const results = await Promise.all(TABLES.map((t) => (t === 'order_requests' ? this._fetchAll(t).catch(() => []) : this._fetchAll(t))));
     TABLES.forEach((t, i) => { this.data[t].clear(); for (const r of results[i]) this._set(t, r); });
     this._replayOutboxLocally();
     this._applyProfile();
@@ -242,7 +253,7 @@ export class SupabaseStore extends BaseStore {
           : await this.sb.from(op.table).delete().eq('id', op.id);
         if (res.error) {
           if (isNetworkError(res.error)) break; // 연결되면 다시 시도
-          this.emit({ error: '저장 실패: ' + res.error.message });
+          this.emit({ error: saveError(op, res.error) });
           this._needReload = true;
         }
         this.outbox.shift();
@@ -271,6 +282,12 @@ export class SupabaseStore extends BaseStore {
     this.emit({ table: t });
     this.flush();
   }
+}
+
+function saveError(op, err) {
+  if (err.code === '23505' && op.table === 'tours') return `저장 실패: BDY ${op.row?.bdy || ''} 번호는 이미 등록되어 있습니다.`;
+  if (err.code === '42501' || /row-level security/i.test(err.message)) return '저장 실패: 이 투어를 고칠 권한이 없습니다.';
+  return '저장 실패: ' + err.message;
 }
 
 function isNetworkError(err) {

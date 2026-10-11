@@ -116,6 +116,10 @@ alter table public.products add column if not exists rates jsonb;
 alter table public.tours add column if not exists prices jsonb not null default '{}';
 -- 투어 담당자: 만든 직원. 담당자와 관리자만 그 투어를 볼 수 있습니다.
 alter table public.tours add column if not exists owner_id uuid references auth.users on delete set null default auth.uid();
+-- 주문 담당자: 직원이 '주문하기'를 누르면 이 사람에게 주문서가 이메일로 갑니다 (아래 맨 끝에서 지정).
+alter table public.profiles add column if not exists order_manager boolean not null default false;
+-- 주문서를 이메일로 보낸 시각
+alter table public.order_requests add column if not exists emailed_at timestamptz;
 
 create index if not exists passengers_tour on public.passengers (tour_id);
 create index if not exists orders_tour on public.orders (tour_id);
@@ -215,6 +219,14 @@ grant execute on function public.is_admin() to authenticated;
 grant execute on function public.can_access_tour(text) to authenticated;
 grant execute on function public.bdy_taken(text, text) to authenticated;
 
+-- 주문 담당자 이메일 목록. 이메일 보내는 서버 함수(send-order)만 읽을 수 있고 앱에서는 볼 수 없습니다.
+create or replace function public.order_manager_emails() returns setof text
+language sql stable security definer set search_path = public as $$
+  select u.email::text from auth.users u join public.profiles p on p.id = u.id where p.order_manager and u.email is not null;
+$$;
+revoke execute on function public.order_manager_emails() from public, anon, authenticated;
+grant execute on function public.order_manager_emails() to service_role;
+
 -- 실시간 전송 켜기
 do $$
 declare t text;
@@ -275,3 +287,6 @@ update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rat
 
 -- 첫 관리자 지정: 대표님 계정을 만든 뒤 이메일을 바꿔서 실행하세요.
 -- update public.profiles set role = 'admin', name = '대표님' where id = (select id from auth.users where email = 'owner@example.com');
+
+-- 주문 담당자 지정: 이 계정에게 주문서 이메일이 갑니다.
+update public.profiles set order_manager = true where id = (select id from auth.users where email = 'field@badayatravel.com');

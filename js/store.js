@@ -36,6 +36,8 @@ class BaseStore {
   }
   // 같은 BDY 번호가 이미 있는지 (체험 모드: 이 기기 데이터만)
   async bdyTaken(bdy, exceptId) { return this.all('tours').some((t) => t.bdy === bdy && t.id !== exceptId); }
+  // 주문서를 주문 담당자에게 이메일로 보내기 (체험 모드에서는 보내지 않음)
+  async sendOrderEmail() { throw new Error('체험 모드에서는 이메일을 보내지 않습니다.'); }
   // 하위 데이터까지 같이 지우기
   async delTour(id) {
     for (const t of ['order_requests', 'orders', 'payments', 'expenses', 'passengers']) {
@@ -153,6 +155,15 @@ export class SupabaseStore extends BaseStore {
     if (check.error) throw new Error('현재 비밀번호가 맞지 않습니다.');
     const { error } = await this.sb.auth.updateUser({ password: next });
     if (error) throw new Error(error.message.includes('different') ? '지금과 다른 비밀번호를 입력하세요.' : '비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도하세요.');
+  }
+  async sendOrderEmail(body) {
+    let res;
+    try { res = await this.sb.functions.invoke('send-order', { body }); } catch { throw new Error('인터넷 연결을 확인하세요.'); }
+    if (!res.error) return res.data;
+    let msg = '';
+    try { msg = (await res.error.context.json()).error; } catch { /* 응답 없음 */ }
+    if (!msg && /Failed to send|fetch/i.test(res.error.message)) msg = navigator.onLine ? '이메일 기능이 아직 설정되지 않았습니다.' : '인터넷 연결을 확인하세요.';
+    throw new Error(msg || res.error.message);
   }
   // 다른 직원 투어는 보이지 않으므로 서버에 번호만 물어봄. 오프라인이면 이 기기 데이터로 확인.
   async bdyTaken(bdy, exceptId) {

@@ -271,7 +271,7 @@ function tabOrders(t, c) {
   <div class="totalbar"><span>현금 판매 합계</span><strong class="fig">${moneyList(c.due, '0')}</strong></div>`;
 }
 
-// 주문서 탭 위쪽: 관리자에게 주문하기 / 다운로드 / 주문 기록
+// 주문서 탭 위쪽: 주문하기(주문 담당자에게 이메일) / 다운로드 / 주문 기록
 function orderBox(t) {
   const reqs = tourRequests(t.id);
   const last = reqs[0];
@@ -281,16 +281,16 @@ function orderBox(t) {
   const canSend = t.status !== 'closed' && (last ? changes.length > 0 : total > 0);
   return `<section class="order-box ${last && changes.length ? 'changed' : ''}">
     <div class="ob-head">
-      <strong>관리자 주문</strong>
       <span class="muted">${last ? `${esc(last.version)}차 주문 · ${shortTime(last.created_at)} · ${last.status === 'received' ? '<b class="good-t">관리자 확인</b>' : '확인 대기'}` : '아직 주문하지 않았습니다'}</span>
     </div>
+    ${last && cloud() && !last.emailed_at ? `<p class="ob-warn">${esc(last.version)}차 주문서 이메일이 아직 가지 않았습니다. <button class="btn small" data-act="order-mail">이메일 다시 보내기</button></p>` : ''}
     ${last && changes.length ? `<p class="ob-warn">주문 후 바뀐 상품 ${changes.length}개: ${changes.slice(0, 4).map((x) => `${esc(x.name)} ${x.before}→${x.after}`).join(', ')}${changes.length > 4 ? ' …' : ''}</p>` : ''}
     <div class="row-actions">
       <button class="btn" data-act="order-dl">주문서 다운로드</button>
-      <button class="btn primary" data-act="order-send" ${canSend ? '' : 'disabled'}>${last ? '바뀐 내용으로 다시 주문하기' : '관리자에게 주문하기'}</button>
+      <button class="btn primary" data-act="order-send" ${canSend ? '' : 'disabled'}>${last ? '바뀐 내용으로 다시 주문하기' : '주문하기'}</button>
     </div>
     ${reqs.length ? `<details class="ob-history"><summary>주문 기록 ${reqs.length}건</summary><ul class="list">${reqs.map((r) => `<li>
-      <div class="li-main"><strong>${esc(r.version)}차</strong> <span class="muted">${shortTime(r.created_at)} · ${esc(r.created_by || '')} · ${r.items.reduce((s, x) => s + x.qty, 0)}건 · ${r.status === 'received' ? '확인' : '대기'}</span></div>
+      <div class="li-main"><strong>${esc(r.version)}차</strong> <span class="muted">${shortTime(r.created_at)} · ${esc(r.created_by || '')} · ${r.items.reduce((s, x) => s + x.qty, 0)}건 · ${r.emailed_at ? '메일 보냄 · ' : ''}${r.status === 'received' ? '확인' : '대기'}</span></div>
       <button class="btn small" data-act="req-dl" data-id="${esc(r.id)}">엑셀</button>
       ${isAdmin() && r.status !== 'received' ? `<button class="btn small primary" data-act="req-ok" data-id="${esc(r.id)}">확인</button>` : ''}
     </li>`).join('')}</ul></details>` : ''}
@@ -306,18 +306,37 @@ function sheetOrder(t) {
   const version = (last?.version || 0) + 1;
   openSheet({
     title: `${version}차 주문하기`,
-    submit: '관리자에게 보내기',
-    body: `<p class="muted">BDY ${esc(t.bdy)} · 총 ${snap.pax}명. 아래 수량으로 관리자에게 주문서를 보냅니다.${last ? ' 바뀐 상품은 색으로 표시했습니다.' : ''}</p>
+    submit: '주문하기',
+    body: `<p class="muted">BDY ${esc(t.bdy)} · 총 ${snap.pax}명. 아래 수량으로 주문서를 만들어 주문 담당자에게 이메일로 보냅니다.${last ? ' 바뀐 상품은 색으로 표시했습니다.' : ''}</p>
       <table class="sumtable order-preview"><thead><tr><th>상품</th><th>수량</th>${last ? '<th>이전</th>' : ''}</tr></thead><tbody>
       ${snap.items.map((x) => { const ch = changes.get(x.product_id); return `<tr class="${ch ? 'chg' : ''}"><th>${esc(x.name)}</th><td class="fig">${x.qty}</td>${last ? `<td class="fig muted">${ch ? ch.before : x.qty}</td>` : ''}</tr>`; }).join('')}
       ${gone.map((x) => `<tr class="chg"><th>${esc(x.name)}</th><td class="fig">0</td><td class="fig muted">${x.before}</td></tr>`).join('')}
       </tbody></table>
-      <label class="field"><span>관리자에게 남길 말 (선택)</span><textarea name="note" rows="2" placeholder="예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소"></textarea></label>`,
+      <label class="field"><span>남길 말 (선택)</span><textarea name="note" rows="2" placeholder="예: 버즈 칼리파 2명 추가, 사막 사파리 1명 취소"></textarea></label>`,
     onSubmit: async (d) => {
-      await store.put('order_requests', { id: uid(), tour_id: t.id, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
-      toast(`${version}차 주문서를 관리자에게 보냈습니다.`, 'good');
+      const req = await store.put('order_requests', { id: uid(), tour_id: t.id, version, items: snap.items, pax: snap.pax, note: d.note.trim() || null, created_by: me(), created_by_id: cloud() ? store.user.id : null, status: 'sent' });
+      if (!cloud()) return toast(`${version}차 주문을 저장했습니다. 체험 모드라 이메일은 보내지 않습니다.`, 'good');
+      emailOrder(t, req);
     },
   });
+}
+
+// 주문서 엑셀을 만들어 주문 담당자에게 이메일로 보내기. 실패해도 주문 기록은 남고, 주문서 탭에서 다시 보낼 수 있습니다.
+async function emailOrder(t, req) {
+  toast(`${req.version}차 주문서를 이메일로 보내는 중…`);
+  try {
+    const { exportOrder } = await import('./excel.js');
+    const prev = tourRequests(t.id).find((x) => (x.version || 0) < (req.version || 0));
+    const file = await exportOrder(t, req, prev?.items);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    await store.sendOrderEmail({ tour_id: t.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty]) });
+    await store.patch('order_requests', req.id, { emailed_at: new Date().toISOString() });
+    toast(`${req.version}차 주문서를 이메일로 보냈습니다.`, 'good');
+  } catch (err) {
+    toast(`주문은 저장했지만 이메일을 보내지 못했습니다. ${err.message || ''}`, 'bad');
+  }
 }
 
 async function downloadFile(file) {
@@ -926,6 +945,7 @@ const actions = {
     } catch (err) { toast(err.message || '엑셀 파일을 만들지 못했습니다.', 'bad'); }
   },
   'order-send': () => { const t = currentTour(); if (t && !locked(t)) sheetOrder(t); },
+  'order-mail': () => { const t = currentTour(); const r = t && tourRequests(t.id)[0]; if (r) emailOrder(t, r); },
   'req-dl': async (d) => {
     const r = store.get('order_requests', d.id);
     const t = r && store.get('tours', r.tour_id);

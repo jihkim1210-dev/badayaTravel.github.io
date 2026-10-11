@@ -108,6 +108,9 @@ body.login .nav { display: none; }
 .btn.wide { width: 100%; }
 .icon-btn { border: 0; background: transparent; color: var(--muted); width: 36px; height: 36px; border-radius: 8px; font-size: 20px; cursor: pointer; flex: none; }
 .icon-btn:hover { background: var(--sunk); }
+.icon-btn svg { display: block; margin: auto; }
+.icon-btn.trash:hover { color: var(--bad, #c0392b); }
+.icon-btn.trash.dim { opacity: .4; }
 .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--sunk); color: var(--muted); white-space: nowrap; font-weight: 500; }
 .st-open { background: var(--accent-soft); color: var(--accent); }
 .st-submitted { background: var(--gold-soft); color: var(--gold); }

@@ -241,6 +241,7 @@ function viewTour(id, tab) {
       <div class="tc-meta">${REGIONS[t.region]?.label || ''} · ${esc(t.tour_code || '')} · ${esc(t.start_date || '')} · ${esc(t.guide || '')} · ${c.passengers.length}명${isAdmin() && cloud() ? ` · 담당 ${esc(ownerName(t.owner_id))}` : ''}${c.products.filter((p) => p.rates?.length > 1).map((p) => ` · ${esc(p.name)} ${money(priceFor(t, p), p.currency)}`).join('')}</div>
     </div>
     <button class="icon-btn" data-act="edit-tour" data-id="${esc(t.id)}" aria-label="투어 정보 수정">✎</button>
+    ${isAdmin() || t.owner_id === store.user?.id ? `<button class="icon-btn trash ${canDeleteTour(t) ? '' : 'dim'}" data-act="del-tour" data-id="${esc(t.id)}" aria-label="투어 삭제"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5M10 11v5.5M14 11v5.5"/></svg></button>` : ''}
   </div>
   ${t.status === 'closed' ? `<div class="banner lock">정산 완료된 투어라 수정할 수 없습니다.${isAdmin() ? ' 정산 탭에서 다시 열 수 있습니다.' : ''}</div>` : ''}
   <nav class="tabs">${TABS.map(([k, l]) => `<a class="${tab === k ? 'on' : ''}" href="#/tour/${esc(t.id)}/${k}">${l}</a>`).join('')}</nav>
@@ -519,9 +520,7 @@ function tabSummary(t, c) {
   <div class="row-actions">
     <button class="btn primary" data-act="export">엑셀로 내려받기</button>
     <button class="btn" data-act="edit-tour" data-id="${esc(t.id)}">투어 정보 수정</button>
-    ${canDeleteTour(t) ? `<button class="btn danger" data-act="del-tour" data-id="${esc(t.id)}">투어 삭제</button>` : ''}
   </div>
-  ${!canDeleteTour(t) && t.owner_id === store.user?.id && tourRequests(t.id).length ? '<p class="hint">이미 주문한 투어는 관리자만 삭제할 수 있습니다.</p>' : ''}
   <p class="hint">엑셀 파일에는 CC(주문서), 정산서, 수금 내역, 지출 내역 시트가 들어갑니다.</p>`;
 }
 
@@ -970,7 +969,7 @@ const actions = {
   },
   'del-tour': async (d) => {
     const t = store.get('tours', d.id);
-    if (!canDeleteTour(t)) return toast('이미 주문한 투어는 관리자만 삭제할 수 있습니다.', 'bad');
+    if (!canDeleteTour(t)) return toast(t?.status === 'closed' ? '정산 완료된 투어는 관리자만 삭제할 수 있습니다.' : '이미 주문한 투어는 관리자만 삭제할 수 있습니다.', 'bad');
     if (t && await confirmSheet(`BDY ${esc(t.bdy)} 투어와 모든 주문·수금·지출 기록을 삭제할까요? 되돌릴 수 없습니다.`)) {
       await store.delTour(t.id);
       location.hash = '#/';

@@ -1,4 +1,4 @@
--- update_2610111309
+-- update_2610111351
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 
@@ -187,8 +187,13 @@ drop policy if exists "staff update tours" on public.tours;
 create policy "staff update tours" on public.tours for update to authenticated
   using ((owner_id = auth.uid() and status <> 'closed') or public.is_admin())
   with check (owner_id = auth.uid() or public.is_admin());
+-- 삭제: 관리자, 또는 아직 주문하기 전인 내 투어 (정산 완료 전)
 drop policy if exists "admin delete tours" on public.tours;
-create policy "admin delete tours" on public.tours for delete to authenticated using (public.is_admin());
+drop policy if exists "delete tours" on public.tours;
+create policy "delete tours" on public.tours for delete to authenticated using (
+  public.is_admin()
+  or (owner_id = auth.uid() and status <> 'closed'
+      and not exists (select 1 from public.order_requests r where r.tour_id = tours.id)));
 
 do $$
 declare t text;

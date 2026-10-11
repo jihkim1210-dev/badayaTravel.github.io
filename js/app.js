@@ -247,6 +247,12 @@ function viewTour(id, tab) {
   <div class="tab-body">${body(t, c)}</div>`;
 }
 
+// 투어 삭제: 관리자, 또는 아직 주문하지 않은 내 투어 (정산 완료 전)
+function canDeleteTour(t) {
+  if (isAdmin()) return true;
+  return !!t && t.owner_id === store.user?.id && t.status !== 'closed' && !tourRequests(t.id).length;
+}
+
 function locked(t) {
   if (t.status === 'closed') { toast('정산 완료된 투어입니다. 다시 연 뒤 수정하세요.', 'bad'); return true; }
   return false;
@@ -513,8 +519,9 @@ function tabSummary(t, c) {
   <div class="row-actions">
     <button class="btn primary" data-act="export">엑셀로 내려받기</button>
     <button class="btn" data-act="edit-tour" data-id="${esc(t.id)}">투어 정보 수정</button>
-    ${isAdmin() ? `<button class="btn danger" data-act="del-tour" data-id="${esc(t.id)}">투어 삭제</button>` : ''}
+    ${canDeleteTour(t) ? `<button class="btn danger" data-act="del-tour" data-id="${esc(t.id)}">투어 삭제</button>` : ''}
   </div>
+  ${!canDeleteTour(t) && t.owner_id === store.user?.id && tourRequests(t.id).length ? '<p class="hint">이미 주문한 투어는 관리자만 삭제할 수 있습니다.</p>' : ''}
   <p class="hint">엑셀 파일에는 CC(주문서), 정산서, 수금 내역, 지출 내역 시트가 들어갑니다.</p>`;
 }
 
@@ -963,6 +970,7 @@ const actions = {
   },
   'del-tour': async (d) => {
     const t = store.get('tours', d.id);
+    if (!canDeleteTour(t)) return toast('이미 주문한 투어는 관리자만 삭제할 수 있습니다.', 'bad');
     if (t && await confirmSheet(`BDY ${esc(t.bdy)} 투어와 모든 주문·수금·지출 기록을 삭제할까요? 되돌릴 수 없습니다.`)) {
       await store.delTour(t.id);
       location.hash = '#/';

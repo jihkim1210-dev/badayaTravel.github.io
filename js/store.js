@@ -40,10 +40,10 @@ class BaseStore {
   async sendOrderEmail() { throw new Error('체험 모드에서는 이메일을 보내지 않습니다.'); }
   // 하위 데이터까지 같이 지우기
   async delTour(id) {
+    await this.del('tours', id);
     for (const t of ['order_requests', 'orders', 'payments', 'expenses', 'passengers']) {
       for (const r of this.all(t).filter((r) => r.tour_id === id)) await this.del(t, r.id);
     }
-    await this.del('tours', id);
   }
   async delPassenger(id) {
     for (const o of this.all('orders').filter((o) => o.passenger_id === id)) await this.del('orders', o.id);
@@ -155,6 +155,17 @@ export class SupabaseStore extends BaseStore {
     if (check.error) throw new Error('현재 비밀번호가 맞지 않습니다.');
     const { error } = await this.sb.auth.updateUser({ password: next });
     if (error) throw new Error(error.message.includes('different') ? '지금과 다른 비밀번호를 입력하세요.' : '비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도하세요.');
+  }
+  // 서버에서는 투어만 지우면 하위 기록이 함께 지워집니다(on delete cascade).
+  // 하위 기록을 따로 지우지 않으므로, 권한이 없어 투어 삭제가 거절되면 기록은 그대로 남습니다.
+  async delTour(id) {
+    await this.del('tours', id);
+    for (const t of ['order_requests', 'orders', 'payments', 'expenses', 'passengers']) {
+      for (const r of this.all(t).filter((r) => r.tour_id === id)) this._unset(t, r.id);
+    }
+    this._cacheSoon();
+    this.emit({ table: 'tours' });
+    this._needReload = true; // 거절됐으면 다시 불러와서 화면에 되살림
   }
   async sendOrderEmail(body) {
     let res;

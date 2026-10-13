@@ -302,7 +302,7 @@ update public.products set currency = 'AED' where region = 'DUBAI' and currency 
 
 update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rates is null;
 
--- 이집트_H 하프데이: Tour Expense 6D/7D/8D ($60/70/80) 중 투어마다 고르기
+-- 이집트H 하프데이: Tour Expense 6D/7D/8D ($60/70/80) 중 투어마다 고르기
 insert into public.products (id, region, name, price, currency, units, sort, rates)
 values ('prd-egypt_h-34', 'EGYPT_H', 'Tour Expense', 60, 'USD', 1, 340, '[60, 70, 80]')
 on conflict (id) do nothing;

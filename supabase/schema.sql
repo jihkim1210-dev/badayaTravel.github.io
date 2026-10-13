@@ -1,4 +1,4 @@
--- update_2610131932
+-- update_2610131936
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 
@@ -305,6 +305,28 @@ update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rat
 -- 이집트H 하프데이: Tour Expense 6D/7D/8D ($60/70/80) 중 투어마다 고르기
 insert into public.products (id, region, name, price, currency, units, sort, rates)
 values ('prd-egypt_h-34', 'EGYPT_H', 'Tour Expense', 60, 'USD', 1, 340, '[60, 70, 80]')
+on conflict (id) do nothing;
+
+-- 이집트H 옵션 (정산 양식 기준, USD). 가격이 비어 있던 항목은 0원·숨김으로 넣어 둡니다.
+insert into public.products (id, region, name, price, currency, units, sort, active) values
+  ('prd-egypt_h-35', 'EGYPT_H', 'Tourism Dhs (5 Star Hotel) 5N', 0, 'USD', 1, 350, false),
+  ('prd-egypt_h-36', 'EGYPT_H', 'Tourism Dhs (5 Star Hotel) 4N', 0, 'USD', 1, 360, false),
+  ('prd-egypt_h-37', 'EGYPT_H', 'Tourism Dhs (3 Star Hotel) 4N', 0, 'USD', 1, 370, false),
+  ('prd-egypt_h-38', 'EGYPT_H', 'Desert Safari', 120, 'USD', 1, 380, true),
+  ('prd-egypt_h-39', 'EGYPT_H', 'ATT', 100, 'USD', 1, 390, true),
+  ('prd-egypt_h-40', 'EGYPT_H', 'Gold Coffee', 80, 'USD', 1, 400, true),
+  ('prd-egypt_h-41', 'EGYPT_H', 'Palm View', 80, 'USD', 1, 410, true),
+  ('prd-egypt_h-42', 'EGYPT_H', 'Dhow Cruise Dinner', 130, 'USD', 1, 420, true),
+  ('prd-egypt_h-43', 'EGYPT_H', 'BBQ Lunch', 60, 'USD', 1, 430, true),
+  ('prd-egypt_h-44', 'EGYPT_H', 'La Perle', 150, 'USD', 1, 440, true),
+  ('prd-egypt_h-45', 'EGYPT_H', 'Louvre Museum', 70, 'USD', 1, 450, true),
+  ('prd-egypt_h-46', 'EGYPT_H', 'Green Planet', 70, 'USD', 1, 460, true),
+  ('prd-egypt_h-47', 'EGYPT_H', 'Seafood Lunch', 30, 'USD', 1, 470, true),
+  ('prd-egypt_h-48', 'EGYPT_H', 'Qasr Al Watan', 70, 'USD', 1, 480, true),
+  ('prd-egypt_h-49', 'EGYPT_H', 'Walk Bridge', 10, 'USD', 1, 490, true),
+  ('prd-egypt_h-50', 'EGYPT_H', 'Future Museum', 80, 'USD', 1, 500, true),
+  ('prd-egypt_h-51', 'EGYPT_H', 'Prepaid Pack A', 0, 'USD', 1, 510, false),
+  ('prd-egypt_h-52', 'EGYPT_H', 'Prepaid Pack B', 0, 'USD', 1, 520, false)
 on conflict (id) do nothing;
 
 -- 기본 이집트 상품의 영문 이름 (영어 화면·엑셀용). 이미 정한 이름은 그대로 둡니다.

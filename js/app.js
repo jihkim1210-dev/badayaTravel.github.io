@@ -871,7 +871,7 @@ function sheetExpense(t) {
     body: `
       <div class="field"><span>${tr('구분')}</span><div class="seg"><label class="radio"><input type="radio" name="kind" value="expense" checked><span>${tr('투어 지출')}</span></label><label class="radio"><input type="radio" name="kind" value="transfer"><span>${tr('계좌이체·환전')}</span></label></div></div>
       <div class="field-row">
-        <label class="field"><span>${tr('장소')}</span><select name="place" id="f-place">${EXPENSE_PLACES.map((p) => opt(p, tr(p), REGIONS[t.region]?.label)).join('')}</select></label>
+        <label class="field"><span>${tr('장소')}</span><select name="place" id="f-place">${EXPENSE_PLACES.map((p) => opt(p, tr(p), REGIONS[t.region]?.place)).join('')}</select></label>
         <label class="field grow"><span>${tr('항목')}</span><input name="category" id="f-cat" list="exp-cats" placeholder="${tr('팁, 커미션…')}"><datalist id="exp-cats">${EXPENSE_CATEGORIES.map((x) => `<option value="${esc(tr(x))}">`).join('')}</datalist></label>
       </div>
       <div class="field-row">

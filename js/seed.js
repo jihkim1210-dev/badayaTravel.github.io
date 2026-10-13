@@ -48,6 +48,8 @@ export const DEFAULT_PRODUCTS = [
   ['DUBAI', 'Tourism Dirham (4N)', 16, 'AED', 1],
   ['DUBAI', 'Tourism Dirham (5N)', 20, 'AED', 1],
   ['DUBAI', 'Tips', 0, 'USD', 1, null, false], // 팁은 USD. 1인당 금액을 정한 뒤 상품 화면에서 가격 입력·표시
+  // 이집트 하프데이: 정산 양식의 Tour Expense 6D/7D/8D ($60/70/80)를 투어마다 고르는 요금으로
+  ['EGYPT_H', 'Tour Expense', 60, 'USD', 1, [60, 70, 80]],
 ].map(([region, name, price, currency, units, rates, active = true], i) => ({
   id: 'prd-' + region.toLowerCase() + '-' + String(i + 1).padStart(2, '0'),
   region, name, name_en: NAME_EN[name] || null, price, currency, units, rates: rates || null, sort: (i + 1) * 10, active,

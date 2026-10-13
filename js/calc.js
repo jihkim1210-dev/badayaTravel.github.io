@@ -6,7 +6,7 @@ export const CURRENCIES = ['EUR', 'USD', 'KRW', 'AED', 'EGP'];
 export const REGIONS = {
   DUBAI: { label: '두바이F', currency: 'AED', place: '두바이' },
   EGYPT: { label: '이집트F', currency: 'EUR', place: '이집트' },
-  EGYPT_H: { label: '이집트H', currency: 'EUR', place: '이집트' },
+  EGYPT_H: { label: '이집트H', currency: 'USD', place: '이집트' },
 };
 
 export const TOUR_CODES = ['EY3N6D', 'EK3N6D', 'KE4N6D', 'KE5N7D', 'KE4N6Dsig', 'KE5N7Dsig'];

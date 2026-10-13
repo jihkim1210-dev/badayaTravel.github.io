@@ -2,11 +2,11 @@
 
 export const CURRENCIES = ['EUR', 'USD', 'KRW', 'AED', 'EGP'];
 
-// (F) = 풀데이, (H) = 하프데이. 장소(place)는 지출 입력의 '장소' 칸에 쓰는 이름입니다.
+// _F = 풀데이, _H = 하프데이. 장소(place)는 지출 입력의 '장소' 칸에 쓰는 이름입니다.
 export const REGIONS = {
-  DUBAI: { label: '두바이(F)', currency: 'AED', place: '두바이' },
-  EGYPT: { label: '이집트(F)', currency: 'EUR', place: '이집트' },
-  EGYPT_H: { label: '이집트(H)', currency: 'EUR', place: '이집트' },
+  DUBAI: { label: '두바이_F', currency: 'AED', place: '두바이' },
+  EGYPT: { label: '이집트_F', currency: 'EUR', place: '이집트' },
+  EGYPT_H: { label: '이집트_H', currency: 'EUR', place: '이집트' },
 };
 
 export const TOUR_CODES = ['EY3N6D', 'EK3N6D', 'KE4N6D', 'KE5N7D', 'KE4N6Dsig', 'KE5N7Dsig'];

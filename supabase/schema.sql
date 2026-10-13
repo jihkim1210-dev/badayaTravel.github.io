@@ -1,4 +1,4 @@
--- update_2610131935
+-- update_2610131932
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 
@@ -302,7 +302,7 @@ update public.products set currency = 'AED' where region = 'DUBAI' and currency 
 
 update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rates is null;
 
--- 이집트(H) 하프데이: Tour Expense 6D/7D/8D ($60/70/80) 중 투어마다 고르기
+-- 이집트_H 하프데이: Tour Expense 6D/7D/8D ($60/70/80) 중 투어마다 고르기
 insert into public.products (id, region, name, price, currency, units, sort, rates)
 values ('prd-egypt_h-34', 'EGYPT_H', 'Tour Expense', 60, 'USD', 1, 340, '[60, 70, 80]')
 on conflict (id) do nothing;

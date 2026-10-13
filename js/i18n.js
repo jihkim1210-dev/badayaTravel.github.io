@@ -62,7 +62,7 @@ const EN = {
   '이집트': 'Egypt',
   '두바이F': 'DubaiF',
   '이집트F': 'EgyptF',
-  '이집트H': 'EgyptH',
+  '두바이H': 'DubaiH',
   '현금': 'Cash',
   '선결제': 'Prepaid',
   '홈쇼핑': 'Home shopping',

@@ -1,4 +1,4 @@
-// Badaya Field: '주문하기'를 누르면 주문서 엑셀을 주문 담당자에게 이메일로 보냅니다.
+// Badaya Field: '주문하기'를 누르면 주문서 엑셀과 Rooming 엑셀을 주문 담당자에게 이메일로 보냅니다.
 // Supabase → Edge Functions 에 이름 send-order 로 배포하고, Secrets 에 RESEND_API_KEY 를 넣으세요.
 // (선택) MAIL_FROM: 보내는 주소. 비우면 Resend 기본 주소(onboarding@resend.dev)를 씁니다.
 // (선택) APP_URL: 앱 주소. 이메일의 '주문 확인' 버튼이 이 주소의 confirm.html 로 연결됩니다.
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   const appUrl = (Deno.env.get('APP_URL') || 'https://jihkim1210-dev.github.io/badayaTravel.github.io/').replace(/\/?$/, '/');
   const admin = createClient(url, service);
 
-  let body: { tour_id?: string; request_id?: string; version?: number; filename?: string; file?: string; note?: string; lines?: [string, number, string?][]; total?: string; confirm?: string; t?: string };
+  let body: { tour_id?: string; request_id?: string; version?: number; filename?: string; file?: string; files?: { filename?: string; file?: string }[]; note?: string; lines?: [string, number, string?][]; total?: string; confirm?: string; t?: string };
   try { body = await req.json(); } catch { return json({ error: '잘못된 요청입니다.' }, 400); }
 
   // 1) 이메일의 '주문 확인' 버튼 (로그인 없이, 서명으로 확인)
@@ -65,9 +65,11 @@ Deno.serve(async (req) => {
   const { data: { user } } = await userDb.auth.getUser(auth.replace(/^Bearer\s+/i, ''));
   if (!user) return json({ error: '로그인이 필요합니다.' }, 401);
 
-  const { tour_id, version, filename, file } = body;
-  if (!tour_id || !filename || !file || !/\.xlsx$/i.test(filename)) return json({ error: '주문서 파일이 없습니다.' }, 400);
-  if (file.length > 7_000_000) return json({ error: '주문서 파일이 너무 큽니다.' }, 400);
+  const { tour_id, version } = body;
+  // 첨부: 주문서 + Rooming (예전 앱은 filename/file 하나만 보냄)
+  const files = (Array.isArray(body.files) && body.files.length ? body.files : [{ filename: body.filename, file: body.file }]).slice(0, 5);
+  if (!tour_id || files.some((f) => !f.filename || !f.file || !/\.xlsx$/i.test(f.filename))) return json({ error: '주문서 파일이 없습니다.' }, 400);
+  if (files.reduce((s, f) => s + f.file!.length, 0) > 7_000_000) return json({ error: '주문서 파일이 너무 큽니다.' }, 400);
 
   const { data: tour } = await userDb.from('tours').select('id,bdy,region,tour_code,start_date').eq('id', tour_id).maybeSingle();
   if (!tour) return json({ error: '이 투어에 주문할 권한이 없습니다.' }, 403);
@@ -104,7 +106,7 @@ Deno.serve(async (req) => {
       subject: `[주문서] BDY ${tour.bdy} ${tour.region} ${v}차 - ${who}`,
       text: confirmUrl ? `${text}\n\n주문 확인: ${confirmUrl}` : text,
       html,
-      attachments: [{ filename, content: file }],
+      attachments: files.map((f) => ({ filename: f.filename, content: f.file })),
     }),
   });
   if (!res.ok) return json({ error: '이메일을 보내지 못했습니다: ' + (await res.text()).slice(0, 300) }, 502);

@@ -1,4 +1,4 @@
--- update_2610131939
+-- update_2610162305
 -- Badaya Field: Supabase SQL Editor 에 통째로 붙여넣고 Run 하세요.
 -- 테이블, 권한(로그인한 직원만 접근), 실시간 전송, 기본 상품표를 만듭니다.
 
@@ -297,8 +297,44 @@ insert into public.products (id, region, name, price, currency, units, sort, act
 values ('prd-dubai-33', 'DUBAI', 'Tips', 0, 'USD', 1, 330, false)
 on conflict (id) do nothing;
 
--- 2026-10-03 이전 버전으로 만든 두바이 상품을 AED로 바꾸기 (팁 제외)
-update public.products set currency = 'AED' where region = 'DUBAI' and currency = 'USD' and id <> 'prd-dubai-33';
+-- 두바이F 옵션: 수금확정서(EY 4N6D_Full) 양식 기준, USD (2026-10-16)
+insert into public.products (id, region, name, price, currency, units, sort, active, rates) values
+  ('prd-dubai-53', 'DUBAI', 'Tour Expense', 60, 'USD', 1, 140, true, null),
+  ('prd-dubai-54', 'DUBAI', 'Dubai Tourism Dirham', 15, 'USD', 1, 150, true, '[15,18]'),
+  ('prd-dubai-55', 'DUBAI', 'Abu Dhabi Tourism Dirham', 3, 'USD', 1, 160, true, null),
+  ('prd-dubai-56', 'DUBAI', 'PCR', 90, 'USD', 1, 170, false, null),
+  ('prd-dubai-57', 'DUBAI', 'Night Tour + Wine', 100, 'USD', 1, 180, true, null),
+  ('prd-dubai-58', 'DUBAI', 'ATT', 100, 'USD', 1, 220, true, null),
+  ('prd-dubai-59', 'DUBAI', 'Gold Coffee', 80, 'USD', 1, 270, true, null),
+  ('prd-dubai-60', 'DUBAI', 'Yacht + ATT', 130, 'USD', 2, 300, true, null),
+  ('prd-dubai-61', 'DUBAI', 'Seafood + Dhow + La Perle', 280, 'USD', 3, 310, true, null)
+on conflict (id) do nothing;
+
+-- 예전 AED 두바이 상품을 USD 로 한 번만 바꾸기 (이미 USD 면 건너뜀). 양식에 없는 상품은 숨김.
+update public.products p set price = v.price, currency = 'USD', sort = v.sort, active = v.active
+  from (values
+    ('prd-dubai-14', 60, 190, true),
+    ('prd-dubai-16', 70, 200, true),
+    ('prd-dubai-23', 120, 210, true),
+    ('prd-dubai-22', 30, 230, true),
+    ('prd-dubai-20', 80, 240, true),
+    ('prd-dubai-18', 130, 250, true),
+    ('prd-dubai-19', 150, 260, true),
+    ('prd-dubai-29', 70, 280, true),
+    ('prd-dubai-27', 70, 290, true),
+    ('prd-dubai-15', 70, 320, false),
+    ('prd-dubai-17', 60, 330, false),
+    ('prd-dubai-25', 10, 340, false),
+    ('prd-dubai-21', 0, 350, false),
+    ('prd-dubai-24', 0, 360, false),
+    ('prd-dubai-26', 0, 370, false),
+    ('prd-dubai-28', 0, 380, false),
+    ('prd-dubai-30', 0, 390, false),
+    ('prd-dubai-31', 0, 400, false),
+    ('prd-dubai-32', 0, 410, false)
+  ) as v(id, price, sort, active)
+ where p.id = v.id and p.currency = 'AED';
+update public.products set sort = 420 where id = 'prd-dubai-33';
 
 update public.products set rates = '[90, 100]' where id = 'prd-egypt-01' and rates is null;
 

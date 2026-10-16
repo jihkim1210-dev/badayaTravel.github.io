@@ -43,7 +43,7 @@ export async function exportTour(store, tour) {
   cc.push(['', t('포함 제외 신청인원수'), '', '', ...c.productRows.map((r) => r.charged)]);
   cc.push(['', t('신청인원수'), '', '', ...c.productRows.map((r) => r.applied)]);
   cc.push(['', t('옵션 금액'), '', '', ...c.productRows.map((r) => r.amount)]);
-  cc.push(['', t('총 옵션 수 (결합상품 2개)'), '', '', c.productRows.reduce((s, r) => s + r.tickets, 0)]);
+  cc.push(['', t('총 옵션 수 (결합상품은 묶인 수만큼)'), '', '', c.productRows.reduce((s, r) => s + r.tickets, 0)]);
   cc.push(['', t('옵션 총계'), '', '', fmt(c.due)]);
   const ws1 = XLSX.utils.aoa_to_sheet(cc);
   ws1['!cols'] = [{ wch: 4 }, { wch: 8 }, { wch: 10 }, { wch: 18 }, ...c.products.map(() => ({ wch: 12 })), { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 30 }];
@@ -119,7 +119,7 @@ export async function exportOrder(tour, req, prevItems) {
   a.push([t('총원'), req.pax, '', '', '', '', '', '']);
   if (req.note) a.push([t('메모'), req.note]);
   a.push([]);
-  a.push(['No', t('상품§col'), t('단가'), t('통화'), t('주문 수량'), t('금액 (단가×수량)'), ...modeKeys.map((k) => t(MODES[k].label)), t('티켓 수 (결합 ×2)'), ...(prevItems ? [t('이전 주문'), t('변경')] : [])]);
+  a.push(['No', t('상품§col'), t('단가'), t('통화'), t('주문 수량'), t('금액 (단가×수량)'), ...modeKeys.map((k) => t(MODES[k].label)), t('티켓 수 (결합상품은 묶인 수만큼)'), ...(prevItems ? [t('이전 주문'), t('변경')] : [])]);
   const rows = [...req.items];
   // 이전 주문에는 있었는데 이번에 0이 된 상품도 보이도록
   for (const x of changes) if (!rows.some((r) => r.product_id === x.product_id)) rows.push({ product_id: x.product_id, name: x.name, name_en: x.name_en, price: '', currency: '', qty: 0, modes: {}, units: 1, customers: [] });
@@ -148,6 +148,66 @@ export async function exportOrder(tour, req, prevItems) {
     ? `BDY${tour.bdy}_${tour.region}_Order${req.version ? `_R${req.version}` : ''}_${stamp(req.created_at)}.xlsx`
     : `BDY${tour.bdy}_${tour.region}_주문서${req.version ? `_${req.version}차` : ''}_${stamp(req.created_at)}.xlsx`;
   return new File([data], name, { type: XLSX_MIME });
+}
+
+// 그룹(방)별 Rooming 리스트: 그룹 번호 = 방 번호. 인원으로 방 타입을 정합니다 (1 SGL, 2 TWN, 3 TRP, 4 QUAD).
+const ROOM_TYPES = { 1: 'SGL', 2: 'TWN', 3: 'TRP', 4: 'QUAD' };
+export async function exportRooming(store, tour) {
+  const XLSX = await loadXLSX();
+  const pax = store.all('passengers').filter((p) => p.tour_id === tour.id)
+    .sort((a, b) => (a.group_no || 0) - (b.group_no || 0) || (a.sort || 0) - (b.sort || 0));
+  const rooms = [];
+  for (const p of pax) {
+    const key = p.group_no || 0;
+    let r = rooms.find((x) => x.no === key);
+    if (!r) rooms.push(r = { no: key, people: [] });
+    r.people.push(p);
+  }
+  for (const r of rooms) r.type = ROOM_TYPES[r.people.length] || `${r.people.length}P`;
+  const person = (p) => [p.name_eng, p.name_kor ? `(${p.name_kor})` : '', p.gender ? ` ${p.gender.toUpperCase()}` : ''].join('').trim();
+
+  const a = [];
+  const merges = [];
+  a.push([t('상품코드'), tour.tour_code || '', '', t('단체명'), `BDY ${tour.bdy} · ${regionLabel(tour.region)}`]);
+  a.push([t('출발일'), tour.start_date || '', '', t('모객인원'), t('{n}명', { n: pax.length }), '', t('가이드'), tour.guide || '']);
+  a.push([t('항공비고')]);
+  a.push([t('수배비고')]);
+  a.push([]);
+  const head = [t('방'), t('타입'), t('이름'), t('비고')];
+  a.push([...head, '', ...head]);
+  // 방을 왼쪽·오른쪽 두 칸으로 나눠 위에서부터 채움 (기존 루밍 양식처럼)
+  for (let i = 0; i < rooms.length; i += 2) {
+    const pair = [rooms[i], rooms[i + 1]].filter(Boolean);
+    const h = Math.max(...pair.map((r) => r.people.length));
+    const top = a.length;
+    for (let k = 0; k < h; k++) a.push(Array(9).fill(''));
+    pair.forEach((r, side) => {
+      const c0 = side * 5;
+      a[top][c0] = r.no || '-';
+      a[top][c0 + 1] = r.type;
+      r.people.forEach((p, k) => { a[top + k][c0 + 2] = person(p); a[top + k][c0 + 3] = p.note || ''; });
+      if (h > 1) for (const c of [c0, c0 + 1]) merges.push({ s: { r: top, c }, e: { r: top + h - 1, c } });
+    });
+  }
+  a.push([]);
+  a.push([t('모닝콜'), '', '', t('식사시간')]);
+  a.push([t('짐 내리는 시간'), '', '', t('호텔 출발시간')]);
+  a.push([t('한국으로의 전화')]);
+  a.push([t('방에서 방으로')]);
+  a.push([]);
+  const types = ['TWN', 'TRP', 'SGL', ...(rooms.some((r) => !['TWN', 'TRP', 'SGL'].includes(r.type)) ? [...new Set(rooms.map((r) => r.type).filter((x) => !['TWN', 'TRP', 'SGL'].includes(x)))] : [])];
+  a.push(['', ...types, t('합계')]);
+  const count = types.map((k) => rooms.filter((r) => r.type === k).length);
+  a.push(['Hotel', ...count, rooms.length]);
+  if (String(tour.region).startsWith('EGYPT')) { a.push(['Cruise']); a.push(['Train']); }
+
+  const ws = XLSX.utils.aoa_to_sheet(a);
+  ws['!merges'] = merges;
+  ws['!cols'] = [{ wch: 8 }, { wch: 7 }, { wch: 34 }, { wch: 16 }, { wch: 3 }, { wch: 8 }, { wch: 7 }, { wch: 34 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rooming');
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new File([data], `BDY${tour.bdy}_${tour.region}_Rooming_${stamp()}.xlsx`, { type: XLSX_MIME });
 }
 
 // 요약 탭을 열 때 미리 받아 두면, 버튼을 눌렀을 때 바로 저장 창이 뜹니다(아이폰은 누른 직후가 아니면 공유 창을 막습니다).

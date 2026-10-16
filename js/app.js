@@ -313,6 +313,7 @@ function orderBox(t) {
     ${last && changes.length ? `<p class="ob-warn">${tr('주문 후 바뀐 상품 {n}개:', { n: changes.length })} ${changes.slice(0, 4).map((x) => `${esc(itemName(x))} ${x.before}→${x.after}`).join(', ')}${changes.length > 4 ? ' …' : ''}</p>` : ''}
     <div class="row-actions">
       <button class="btn" data-act="order-dl">${tr('주문서 다운로드')}</button>
+      <button class="btn" data-act="rooming-dl">${tr('Rooming 다운로드')}</button>
       <button class="btn primary" data-act="order-send" ${canSend ? '' : 'disabled'}>${last ? tr('바뀐 내용으로 다시 주문하기') : tr('주문하기')}</button>
     </div>
     ${reqs.length ? `<details class="ob-history"><summary>${tr('주문 기록 {n}건', { n: reqs.length })}</summary><ul class="list">${reqs.map((r) => `<li>
@@ -351,13 +352,19 @@ function sheetOrder(t) {
 async function emailOrder(t, req) {
   toast(tr('{v}차 주문서를 이메일로 보내는 중…', { v: req.version }));
   try {
-    const { exportOrder } = await import('./excel.js');
+    const { exportOrder, exportRooming } = await import('./excel.js');
     const prev = tourRequests(t.id).find((x) => (x.version || 0) < (req.version || 0));
     const file = await exportOrder(t, { ...req, items: withEn(req.items) }, prev && withEn(prev.items));
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let bin = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    await store.sendOrderEmail({ tour_id: t.id, request_id: req.id, version: req.version, filename: file.name, file: btoa(bin), note: req.note || '', lines: req.items.map((x) => [x.name, x.qty, money(x.price * x.qty, x.currency)]), total: moneyList(orderTotals(req.items), '0') });
+    // 주문서와 함께 그룹(방)별 Rooming 파일도 첨부
+    const rooming = await exportRooming(store, t);
+    const b64 = async (f) => {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    };
+    const files = [{ filename: file.name, file: await b64(file) }, { filename: rooming.name, file: await b64(rooming) }];
+    await store.sendOrderEmail({ tour_id: t.id, request_id: req.id, version: req.version, filename: file.name, file: files[0].file, files, note: req.note || '', lines: req.items.map((x) => [x.name, x.qty, money(x.price * x.qty, x.currency)]), total: moneyList(orderTotals(req.items), '0') });
     await store.patch('order_requests', req.id, { emailed_at: new Date().toISOString() });
     toast(tr('{v}차 주문서를 이메일로 보냈습니다.', { v: req.version }), 'good');
   } catch (err) {
@@ -529,13 +536,13 @@ function tabSummary(t, c) {
   <div class="scroll-x"><table class="sumtable">
     <thead><tr><th>${tr('상품§col')}</th><th>${tr('단가')}</th><th>${tr('신청')}</th><th>${tr('현금')}</th>${modeCols.map(([, m]) => `<th>${tr(m.label)}</th>`).join('')}<th>${tr('금액')}</th></tr></thead>
     <tbody>${c.productRows.filter((r) => r.applied).map((r) => `<tr>
-      <th>${esc(pname(r.product))}${r.product.units > 1 ? ' <small>(×2)</small>' : ''}</th>
+      <th>${esc(pname(r.product))}${r.product.units > 1 ? ` <small>(×${r.product.units})</small>` : ''}</th>
       <td class="fig">${money(r.product.price, r.product.currency)}</td>
       <td class="fig">${r.applied}</td><td class="fig">${r.charged}</td>
       ${modeCols.map(([k]) => `<td class="fig">${r.modes[k] || ''}</td>`).join('')}
       <td class="fig">${money(r.amount, r.product.currency)}</td></tr>`).join('') || `<tr><td colspan="${5 + modeCols.length}" class="muted">${tr('선택된 상품이 없습니다.')}</td></tr>`}</tbody>
     <tfoot><tr><th>${tr('합계')}</th><td></td><td class="fig">${c.productRows.reduce((s, r) => s + r.applied, 0)}</td><td class="fig">${c.productRows.reduce((s, r) => s + r.charged, 0)}</td>${modeCols.map(() => '<td></td>').join('')}<td class="fig">${moneyList(c.due, '0')}</td></tr>
-      <tr><th>${tr('총 옵션 수')}</th><td colspan="${4 + modeCols.length}" class="fig">${tr('{n}개 (결합상품은 2개로 계산)', { n: c.productRows.reduce((s, r) => s + r.tickets, 0) })}</td></tr></tfoot>
+      <tr><th>${tr('총 옵션 수')}</th><td colspan="${4 + modeCols.length}" class="fig">${tr('{n}개 (결합상품은 묶인 수만큼 계산)', { n: c.productRows.reduce((s, r) => s + r.tickets, 0) })}</td></tr></tfoot>
   </table></div>
   <div class="row-actions">
     <button class="btn primary" data-act="export">${tr('엑셀로 내려받기')}</button>
@@ -556,7 +563,7 @@ function viewProducts() {
   <ul class="list products">${list.map((p) => `<li class="${p.active === false ? 'off' : ''}">
     <button class="li-main as-btn" data-act="edit-prd" data-id="${esc(p.id)}" ${isAdmin() ? '' : 'disabled'}>
       <strong>${esc(pname(p))}</strong>
-      <span class="muted">${p.rates?.length ? tr('투어별 요금 {rates}', { rates: p.rates.join(' / ') }) + ' · ' : ''}${p.units > 1 ? tr('결합상품 (2개로 계산) · ') : ''}${p.active === false ? tr('숨김') : tr('판매중')}</span>
+      <span class="muted">${p.rates?.length ? tr('투어별 요금 {rates}', { rates: p.rates.join(' / ') }) + ' · ' : ''}${p.units > 1 ? tr('결합상품 ({n}개로 계산) · ', { n: p.units }) : ''}${p.active === false ? tr('숨김') : tr('판매중')}</span>
     </button>
     <span class="fig">${money(p.price, p.currency)}</span>
   </li>`).join('') || `<li class="muted">${tr('등록된 상품이 없습니다.')}</li>`}</ul>`;
@@ -907,13 +914,13 @@ function sheetProduct(p) {
         <label class="field"><span>${tr('통화')}</span><select name="currency" id="f-pcur">${CURRENCIES.map((k) => opt(k, k, p.currency)).join('')}</select></label>
       </div>
       <label class="field"><span>${tr('투어별 요금 선택지 (선택)')}</span><input name="rates" id="f-prates" inputmode="decimal" value="${esc((p.rates || []).join(', '))}" placeholder="${tr('예: 90, 100 → 투어 만들 때 고름')}"></label>
-      <label class="check-field"><input type="checkbox" name="combo" id="f-combo" ${p.units > 1 ? 'checked' : ''}> ${tr('결합상품 (옵션 수를 2개로 계산)')}</label>
+      <label class="field"><span>${tr('옵션 수로 셀 때')}</span><select name="units" id="f-units">${[1, 2, 3, 4].map((n) => opt(n, n === 1 ? tr('1개 (단일 상품)') : tr('{n}개 (결합상품)', { n }), p.units || 1)).join('')}</select></label>
       <label class="check-field"><input type="checkbox" name="active" id="f-active" ${p.active !== false ? 'checked' : ''}> ${tr('주문서에 표시')}</label>`,
     extra: isNew ? '' : `<button type="button" class="btn danger" data-del-prd>${tr('삭제')}</button>`,
     onSubmit: async (d) => {
       require(d.name.trim(), tr('상품명을 입력하세요.'));
       const max = Math.max(0, ...store.all('products').map((x) => x.sort || 0));
-      await store.put('products', { ...p, id: p.id || uid(), region: d.region, name: d.name.trim(), ...(d.name_en.trim() || 'name_en' in p ? { name_en: d.name_en.trim() || null } : {}), price: round2(num(d.price)), rates: parseRates(d.rates), currency: d.currency, units: d.combo ? 2 : 1, active: !!d.active, sort: p.sort ?? max + 10 });
+      await store.put('products', { ...p, id: p.id || uid(), region: d.region, name: d.name.trim(), ...(d.name_en.trim() || 'name_en' in p ? { name_en: d.name_en.trim() || null } : {}), price: round2(num(d.price)), rates: parseRates(d.rates), currency: d.currency, units: parseInt(d.units, 10) || 1, active: !!d.active, sort: p.sort ?? max + 10 });
     },
   });
   s.form.querySelector('[data-del-prd]')?.addEventListener('click', async () => {
@@ -988,6 +995,13 @@ const actions = {
       const snap = orderSnapshot(store, t);
       const last = tourRequests(t.id)[0];
       await downloadFile(await exportOrder(t, { ...snap, created_by: me() }, last && withEn(last.items)));
+    } catch (err) { toast(err.message || tr('엑셀 파일을 만들지 못했습니다.'), 'bad'); }
+  },
+  'rooming-dl': async () => {
+    const t = currentTour(); if (!t) return;
+    try {
+      const { exportRooming } = await import('./excel.js');
+      await downloadFile(await exportRooming(store, t));
     } catch (err) { toast(err.message || tr('엑셀 파일을 만들지 못했습니다.'), 'bad'); }
   },
   'order-send': () => { const t = currentTour(); if (t && !locked(t)) sheetOrder(t); },

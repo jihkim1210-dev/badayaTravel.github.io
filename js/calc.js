@@ -4,7 +4,7 @@ export const CURRENCIES = ['EUR', 'USD', 'KRW', 'AED', 'EGP'];
 
 // F = 풀데이, H = 하프데이. 장소(place)는 지출 입력의 '장소' 칸에 쓰는 이름입니다.
 export const REGIONS = {
-  DUBAI: { label: '두바이F', currency: 'AED', place: '두바이' },
+  DUBAI: { label: '두바이F', currency: 'USD', place: '두바이' },
   DUBAI_H: { label: '두바이H', currency: 'USD', place: '두바이' },
   EGYPT: { label: '이집트F', currency: 'EUR', place: '이집트' },
 };
